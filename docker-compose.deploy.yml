@@ -1,0 +1,72 @@
+services:
+  fileserver:
+    # GitHub Container Registry からイメージを取得
+    # タグの例: latest, v1.0.0, main-abc1234
+    image: ghcr.io/lecieletoile/filego:${IMAGE_TAG:-latest}
+    container_name: fileserver
+
+    # ポート設定
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+
+    # ボリュームマウント
+    volumes:
+      # 設定ファイルとデータベース（自動生成）
+      - ./config:/root/config:rw
+      # アップロードファイル保存先
+      - ./data/uploads:/root/data/uploads:rw
+      # ログファイル
+      - ./logs:/root/logs:rw
+
+    # 環境変数
+    environment:
+      - TZ=${TZ:-Asia/Tokyo}
+
+    # 環境変数ファイルから読み込み（オプション）
+    env_file:
+      - .env
+
+    # 自動再起動設定
+    restart: unless-stopped
+
+    # ヘルスチェック
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # ログ設定（ローテーション）
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "service=fileserver"
+
+    # リソース制限
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # セキュリティ設定
+    security_opt:
+      - no-new-privileges:true
+
+    # ユーザー設定（オプション：非rootユーザーで実行する場合）
+    # user: "1000:1000"
+
+    # ネットワーク設定
+    networks:
+      - fileserver_network
+
+networks:
+  fileserver_network:
+    driver: bridge
+
