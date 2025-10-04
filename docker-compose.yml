@@ -1,0 +1,19 @@
+services:
+  fileserver:
+    build: .
+    container_name: fileserver
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/root/config
+      - ./data/uploads:/root/data/uploads
+      - ./logs:/root/logs
+    environment:
+      - TZ=Asia/Tokyo
+    restart: unless-stopped
+    networks:
+      - fileserver_network
+
+networks:
+  fileserver_network:
+    driver: bridge

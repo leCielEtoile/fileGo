@@ -1,0 +1,36 @@
+# バイナリ
+fileserver
+
+# 設定ファイル
+config/config.yaml
+*.db
+*.db-journal
+
+# データ
+data/
+uploads/
+logs/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore

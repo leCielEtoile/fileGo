@@ -1,0 +1,41 @@
+server:
+  port: "8080"
+  behind_proxy: true
+  trusted_proxies:
+    - "172.16.0.0/12"
+    - "10.0.0.0/8"
+    - "192.168.0.0/16"
+
+discord:
+  bot_token: "YOUR_BOT_TOKEN"
+  client_id: "YOUR_CLIENT_ID"
+  client_secret: "YOUR_CLIENT_SECRET"
+  guild_id: "YOUR_GUILD_ID"
+  redirect_url: "https://yourdomain.com/auth/callback"
+
+database:
+  path: "/root/config/fileserver.db"
+  max_connections: 10
+
+storage:
+  upload_path: "/root/data/uploads"
+  max_file_size: 104857600  # 100MB
+  chunk_upload_enabled: true
+  chunk_size: 20971520  # 20MB
+  max_chunk_file_size: 536870912000  # 500GB
+  max_concurrent_uploads: 3
+  upload_session_ttl: 48h
+  cleanup_interval: 1h
+  directories:
+    - path: "admin"
+      required_roles: ["123456789012345678"]
+      permissions: ["read", "write", "delete"]
+    - path: "staff"
+      required_roles: ["234567890123456789"]
+      permissions: ["read", "write"]
+    - path: "members"
+      required_roles: ["345678901234567890"]
+      permissions: ["read", "write"]
+    - path: "public"
+      required_roles: []
+      permissions: ["read"]
