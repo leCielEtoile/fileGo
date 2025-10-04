@@ -1,36 +1,85 @@
 # バイナリ
 fileserver
-
-# 設定ファイル
-config/config.yaml
-*.db
-*.db-journal
-
-# データ
-data/
-uploads/
-logs/
-
-# Go
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+
+# 設定ファイル（機密情報）
+config/config.yaml
+config.yaml
+.env
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# データディレクトリ
+data/
+uploads/
+logs/
+backup/
+tmp/
+
+# テスト・カバレッジ
 *.test
 *.out
-go.work
+coverage.out
+coverage.html
+*.cover
+*.coverprofile
 
-# IDE
+# ビルド成果物
+build/
+dist/
+bin/
+
+# Go関連
+go.work
+go.work.sum
+vendor/
+
+# IDE・エディタ
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+*.iml
+.project
+.settings/
+.classpath
 
-# OS
+# OS固有
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
 # Docker
 .dockerignore
+
+# CI/CD・デプロイ
+.env.local
+.env.*.local
+*.log
+
+# Air（ホットリロード）
+.air.toml
+tmp/
+
+# デバッグ
+__debug_bin
+debug
+pprof/
+
+# その他
+*.pid
+*.seed
+*.pid.lock
+.cache/
