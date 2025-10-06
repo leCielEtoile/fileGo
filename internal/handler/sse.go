@@ -13,8 +13,8 @@ import (
 
 // SSEEvent イベントの種類
 type SSEEvent struct {
-	Type string
 	Data interface{}
+	Type string
 }
 
 // SSEHandler Server-Sent Eventsハンドラー
