@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
@@ -190,11 +189,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
-	user, ok := r.Context().Value(userContextKey).(*models.User)
-	if !ok {
-		http.Error(w, "ユーザー情報の取得に失敗しました", http.StatusInternalServerError)
-		return
-	}
+	user := r.Context().Value(models.UserContextKey).(*models.User)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(user); err != nil {

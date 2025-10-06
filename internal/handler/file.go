@@ -19,11 +19,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// contextKey is a custom type for context keys to avoid staticcheck issues
-type contextKey string
-
-const userContextKey contextKey = "user"
-
 type FileHandler struct {
 	config            *config.Config
 	storageManager    *storage.Manager
@@ -47,11 +42,7 @@ func (h *FileHandler) SetSSEHandler(sse *SSEHandler) {
 
 // Upload 通常のファイルアップロード（最大100MB）
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
-	user, ok := r.Context().Value(userContextKey).(*models.User)
-	if !ok {
-		http.Error(w, "ユーザー情報の取得に失敗しました", http.StatusInternalServerError)
-		return
-	}
+	user := r.Context().Value(models.UserContextKey).(*models.User)
 
 	// ディレクトリパス取得
 	directory := r.FormValue("directory")
@@ -121,7 +112,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 // ListFiles ファイル一覧取得
 func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
-	user, ok := r.Context().Value(userContextKey).(*models.User)
+	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {
 		http.Error(w, "ユーザー情報の取得に失敗しました", http.StatusInternalServerError)
 		return
@@ -173,7 +164,7 @@ func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 
 // Download ファイルダウンロード（Range Request対応）
 func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
-	user, ok := r.Context().Value(userContextKey).(*models.User)
+	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {
 		http.Error(w, "ユーザー情報の取得に失敗しました", http.StatusInternalServerError)
 		return
@@ -269,7 +260,7 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 
 // DeleteFile ファイル削除
 func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
-	user, ok := r.Context().Value(userContextKey).(*models.User)
+	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {
 		http.Error(w, "ユーザー情報の取得に失敗しました", http.StatusInternalServerError)
 		return
@@ -322,7 +313,7 @@ func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 
 // ListDirectories ユーザーがアクセス可能なディレクトリ一覧を取得
 func (h *FileHandler) ListDirectories(w http.ResponseWriter, r *http.Request) {
-	user, ok := r.Context().Value(userContextKey).(*models.User)
+	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {
 		http.Error(w, "ユーザー情報の取得に失敗しました", http.StatusInternalServerError)
 		return

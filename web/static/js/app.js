@@ -16,16 +16,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 認証チェック
 async function checkAuth() {
     try {
+        console.log('認証チェック開始...');
         const response = await fetch('/api/user', {
             credentials: 'include'
         });
 
+        console.log('認証レスポンス:', response.status);
+
         if (response.ok) {
             state.user = await response.json();
+            console.log('認証成功:', state.user);
             showAppSection();
             await loadDirectories();
             connectSSE();
         } else {
+            console.log('認証失敗: ログインが必要です');
             showLoginSection();
         }
     } catch (error) {
