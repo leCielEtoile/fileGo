@@ -30,11 +30,14 @@ WORKDIR /root
 # ビルドしたバイナリをコピー
 COPY --from=builder /build/fileserver .
 
+# Webファイルをコピー
+COPY --from=builder /build/web ./web
+
 # エントリーポイントスクリプトをコピー
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# ディレクトリ作成（entrypoint.shでも作成されるが、初期化のため）
+# ディレクトリ作成
 RUN mkdir -p /root/config /root/data/uploads /root/logs
 
 # ポート公開

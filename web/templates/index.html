@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord File Server</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Discord File Server</h1>
+            <div id="user-info" class="user-info"></div>
+        </header>
+
+        <main>
+            <!-- ログイン前 -->
+            <div id="login-section" class="section">
+                <div class="login-box">
+                    <h2>ログインが必要です</h2>
+                    <p>Discordアカウントでログインしてください</p>
+                    <a href="/auth/login" class="btn btn-primary">Discordでログイン</a>
+                </div>
+            </div>
+
+            <!-- ログイン後 -->
+            <div id="app-section" class="section hidden">
+                <!-- ディレクトリ選択 -->
+                <div class="directory-section">
+                    <h2>ディレクトリ</h2>
+                    <div id="directory-list" class="directory-list"></div>
+                </div>
+
+                <!-- ファイルアップロード -->
+                <div class="upload-section">
+                    <h2>ファイルアップロード</h2>
+                    <div class="upload-box">
+                        <input type="file" id="file-input" class="file-input">
+                        <button id="upload-btn" class="btn btn-primary" disabled>アップロード</button>
+                        <button id="chunk-upload-btn" class="btn btn-secondary" disabled>大容量アップロード (100MB以上)</button>
+                    </div>
+                    <div id="upload-progress" class="upload-progress hidden">
+                        <div class="progress-bar">
+                            <div id="progress-fill" class="progress-fill"></div>
+                        </div>
+                        <div id="progress-text" class="progress-text">0%</div>
+                    </div>
+                </div>
+
+                <!-- ファイル一覧 -->
+                <div class="files-section">
+                    <h2>ファイル一覧</h2>
+                    <div id="files-list" class="files-list"></div>
+                </div>
+
+                <!-- アクティビティログ (SSE) -->
+                <div class="activity-section">
+                    <h2>アクティビティログ <span class="sse-status" id="sse-status"></span></h2>
+                    <div id="activity-log" class="activity-log"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
