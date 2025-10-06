@@ -163,6 +163,218 @@ function setupEventListeners() {
 
     // チャンクアップロード
     document.getElementById('chunk-upload-btn').addEventListener('click', handleChunkUpload);
+
+    // ドラッグ&ドロップ
+    setupDragAndDrop();
+}
+
+// ドラッグ&ドロップ設定
+function setupDragAndDrop() {
+    const uploadSection = document.querySelector('.upload-section');
+    const dropZone = document.createElement('div');
+    dropZone.className = 'drop-zone';
+    dropZone.innerHTML = `
+        <div class="drop-zone-content">
+            <svg class="drop-zone-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <p class="drop-zone-text">ファイルをドラッグ&ドロップ</p>
+            <p class="drop-zone-subtext">または</p>
+            <label for="file-input" class="drop-zone-button">ファイルを選択</label>
+        </div>
+    `;
+
+    // 既存のupload-boxを置き換え
+    const uploadBox = uploadSection.querySelector('.upload-box');
+    uploadBox.replaceWith(dropZone);
+
+    // ファイル入力を隠す
+    const fileInput = document.getElementById('file-input');
+    fileInput.style.display = 'none';
+
+    // ドラッグイベント
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    // ハイライト
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.add('drop-zone-active');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.remove('drop-zone-active');
+        });
+    });
+
+    // ドロップ処理
+    dropZone.addEventListener('drop', (e) => {
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) {
+            handleDroppedFiles(files);
+        }
+    });
+
+    // クリックでファイル選択
+    dropZone.addEventListener('click', (e) => {
+        if (e.target !== fileInput && !e.target.closest('label')) {
+            fileInput.click();
+        }
+    });
+
+    // ファイル選択時
+    fileInput.addEventListener('change', (e) => {
+        if (fileInput.files.length > 0) {
+            handleDroppedFiles(Array.from(fileInput.files));
+        }
+    });
+}
+
+// ドロップされたファイルの処理
+async function handleDroppedFiles(files) {
+    if (!state.selectedDirectory) {
+        alert('ディレクトリを選択してください');
+        return;
+    }
+
+    const selectedDir = state.directories.find(d => d.path === state.selectedDirectory);
+    const canWrite = selectedDir && selectedDir.permissions.includes('write');
+
+    if (!canWrite) {
+        alert('このディレクトリへの書き込み権限がありません');
+        return;
+    }
+
+    // 複数ファイルを順次アップロード
+    for (const file of files) {
+        await uploadSingleFile(file);
+    }
+}
+
+// 単一ファイルアップロード（共通化）
+async function uploadSingleFile(file) {
+    console.log('アップロード開始:', file.name, formatFileSize(file.size));
+
+    // 100MB以上はチャンクアップロード
+    if (file.size > 100 * 1024 * 1024) {
+        await uploadFileInChunks(file);
+    } else {
+        await uploadFileNormal(file);
+    }
+}
+
+// 通常アップロード（リファクタリング）
+async function uploadFileNormal(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('directory', state.selectedDirectory);
+
+    showProgress(true);
+    setProgress(0);
+
+    try {
+        const response = await fetch('/files/upload', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            addActivityLog('upload', `${file.name} をアップロードしました`);
+            setProgress(100);
+            await loadFiles(state.selectedDirectory);
+        } else {
+            const error = await response.text();
+            addActivityLog('error', `アップロード失敗: ${error}`);
+        }
+    } catch (error) {
+        console.error('アップロードエラー:', error);
+        addActivityLog('error', 'アップロードに失敗しました');
+    } finally {
+        setTimeout(() => showProgress(false), 500);
+    }
+}
+
+// チャンクアップロード（リファクタリング）
+async function uploadFileInChunks(file) {
+    const chunkSize = 20 * 1024 * 1024; // 20MB
+    const totalChunks = Math.ceil(file.size / chunkSize);
+
+    showProgress(true);
+    setProgress(0);
+
+    try {
+        // 初期化
+        const initResponse = await fetch('/files/chunk/init', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                filename: file.name,
+                directory: state.selectedDirectory,
+                file_size: file.size,
+                chunk_size: chunkSize
+            }),
+            credentials: 'include'
+        });
+
+        if (!initResponse.ok) {
+            throw new Error('チャンクアップロードの初期化に失敗しました');
+        }
+
+        const { upload_id } = await initResponse.json();
+        addActivityLog('upload', `チャンクアップロード開始: ${file.name}`);
+
+        // 各チャンクをアップロード
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const chunk = file.slice(start, end);
+
+            const uploadResponse = await fetch(`/files/chunk/upload/${upload_id}?chunk_index=${i}`, {
+                method: 'POST',
+                body: chunk,
+                credentials: 'include'
+            });
+
+            if (!uploadResponse.ok) {
+                throw new Error(`チャンク ${i + 1} のアップロードに失敗しました`);
+            }
+
+            const progress = Math.round(((i + 1) / totalChunks) * 100);
+            setProgress(progress);
+        }
+
+        // 完了
+        const completeResponse = await fetch(`/files/chunk/complete/${upload_id}`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        if (!completeResponse.ok) {
+            throw new Error('チャンクアップロードの完了に失敗しました');
+        }
+
+        addActivityLog('upload', `${file.name} のアップロードが完了しました`);
+        await loadFiles(state.selectedDirectory);
+
+    } catch (error) {
+        console.error('チャンクアップロードエラー:', error);
+        addActivityLog('error', error.message);
+    } finally {
+        setTimeout(() => showProgress(false), 500);
+    }
 }
 
 // 通常アップロード
