@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -14,10 +13,6 @@ import (
 	"fileserver/internal/models"
 )
 
-// contextKey is a custom type for context keys to avoid staticcheck issues
-type contextKey string
-
-const userContextKey contextKey = "user"
 
 // Logger logging middleware
 func Logger(next http.Handler) http.Handler {
@@ -117,9 +112,12 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Hand
 			// Get session token
 			cookie, err := r.Cookie("session_token")
 			if err != nil {
+				slog.Debug("認証Cookie未検出", "path", r.URL.Path, "error", err)
 				http.Error(w, "authentication required", http.StatusUnauthorized)
 				return
 			}
+
+			slog.Debug("認証Cookie検出", "path", r.URL.Path, "token_prefix", cookie.Value[:10]+"...")
 
 			// Validate session
 			var session models.Session
@@ -130,7 +128,8 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Hand
 			`, cookie.Value).Scan(&session.SessionToken, &session.UserID, &session.ExpiresAt)
 
 			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
+				if err == sql.ErrNoRows {
+					slog.Debug("無効または期限切れセッション", "token_prefix", cookie.Value[:10]+"...")
 					http.Error(w, "invalid session", http.StatusUnauthorized)
 					return
 				}
@@ -138,6 +137,8 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Hand
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
+
+			slog.Debug("セッション検証成功", "user_id", session.UserID)
 
 			// Get user information
 			var user models.User
@@ -155,7 +156,8 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Hand
 			)
 
 			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
+				if err == sql.ErrNoRows {
+					slog.Warn("ユーザー情報が見つかりません", "user_id", session.UserID)
 					http.Error(w, "user not found", http.StatusUnauthorized)
 					return
 				}
@@ -164,8 +166,10 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Hand
 				return
 			}
 
+			slog.Debug("ユーザー情報取得成功", "username", user.Username)
+
 			// Add user info to context
-			ctx := context.WithValue(r.Context(), userContextKey, &user)
+			ctx := context.WithValue(r.Context(), models.UserContextKey, &user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
