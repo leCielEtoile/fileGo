@@ -1,10 +1,6 @@
-# バイナリ
+# Binaries
 fileserver
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+fileserver.exe
 
 # 設定ファイル（機密情報）
 config/config.yaml
@@ -21,6 +17,13 @@ uploads/
 logs/
 backup/
 tmp/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
 # テスト・カバレッジ
 *.test
@@ -47,6 +50,7 @@ vendor/
 *.swo
 *~
 *.iml
+.fleet/
 .project
 .settings/
 .classpath
@@ -60,6 +64,7 @@ vendor/
 ehthumbs.db
 Thumbs.db
 desktop.ini
+Desktop.ini
 
 # Docker
 .dockerignore
@@ -71,15 +76,26 @@ desktop.ini
 
 # Air（ホットリロード）
 .air.toml
-tmp/
 
 # デバッグ
 __debug_bin
 debug
 pprof/
+*.pprof
 
 # その他
 *.pid
 *.seed
 *.pid.lock
 .cache/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.tar.gz
+*.zip
+*.tar
+*.gz
+
+# Claude Code
+.claude/

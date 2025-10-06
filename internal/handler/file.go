@@ -29,6 +29,7 @@ type FileHandler struct {
 	storageManager    *storage.Manager
 	uploadManager     *storage.UploadManager
 	permissionChecker *permission.Checker
+	sseHandler        *SSEHandler
 }
 
 func NewFileHandler(cfg *config.Config, sm *storage.Manager, um *storage.UploadManager, pc *permission.Checker) *FileHandler {
@@ -38,6 +39,10 @@ func NewFileHandler(cfg *config.Config, sm *storage.Manager, um *storage.UploadM
 		uploadManager:     um,
 		permissionChecker: pc,
 	}
+}
+
+func (h *FileHandler) SetSSEHandler(sse *SSEHandler) {
+	h.sseHandler = sse
 }
 
 // Upload 通常のファイルアップロード（最大100MB）
@@ -97,6 +102,11 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("ファイルアップロード成功", "user_id", user.DiscordID, "filename", header.Filename, "directory", directory, "size", header.Size)
+
+	// SSEでブロードキャスト
+	if h.sseHandler != nil {
+		h.sseHandler.BroadcastFileUpload(user, directory, savedFile.Filename, savedFile.Size)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
@@ -250,6 +260,11 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("ファイルダウンロード", "user_id", user.DiscordID, "filename", filename, "directory", directory)
+
+	// SSEでブロードキャスト
+	if h.sseHandler != nil {
+		h.sseHandler.BroadcastFileDownload(user, directory, filename)
+	}
 }
 
 // DeleteFile ファイル削除
@@ -290,6 +305,11 @@ func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("ファイル削除成功", "user_id", user.DiscordID, "filename", filename, "directory", directory)
+
+	// SSEでブロードキャスト
+	if h.sseHandler != nil {
+		h.sseHandler.BroadcastFileDelete(user, directory, filename)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{

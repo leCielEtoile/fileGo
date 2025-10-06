@@ -58,10 +58,17 @@ func main() {
 	// 権限チェッカー初期化
 	permissionChecker := permission.NewChecker(cfg, discordClient)
 
+	// SSEハンドラー初期化
+	sseHandler := handler.NewSSEHandler()
+
 	// ハンドラー初期化
 	authHandler := handler.NewAuthHandler(cfg, db)
 	fileHandler := handler.NewFileHandler(cfg, storageManager, uploadManager, permissionChecker)
 	chunkHandler := handler.NewChunkHandler(uploadManager, permissionChecker)
+
+	// SSEハンドラーをファイルハンドラーに注入
+	fileHandler.SetSSEHandler(sseHandler)
+	authHandler.SetSSEHandler(sseHandler)
 
 	// ルーター設定
 	r := chi.NewRouter()
@@ -70,6 +77,14 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RealIP(cfg.Server.BehindProxy, cfg.Server.TrustedProxies))
+
+	// 静的ファイル
+	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+
+	// ルートパス（Webインターフェース）
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/templates/index.html")
+	})
 
 	// ヘルスチェック
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -90,6 +105,9 @@ func main() {
 
 		// ユーザー情報
 		r.Get("/api/user", authHandler.GetCurrentUser)
+
+		// Server-Sent Events
+		r.Get("/api/events", sseHandler.HandleSSE)
 
 		// ファイル操作
 		r.Post("/files/upload", fileHandler.Upload)

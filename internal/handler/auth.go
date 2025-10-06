@@ -21,6 +21,7 @@ type AuthHandler struct {
 	config      *config.Config
 	db          *sql.DB
 	oauthConfig *oauth2.Config
+	sseHandler  *SSEHandler
 }
 
 func NewAuthHandler(cfg *config.Config, db *sql.DB) *AuthHandler {
@@ -40,6 +41,10 @@ func NewAuthHandler(cfg *config.Config, db *sql.DB) *AuthHandler {
 		db:          db,
 		oauthConfig: oauthConfig,
 	}
+}
+
+func (h *AuthHandler) SetSSEHandler(sse *SSEHandler) {
+	h.sseHandler = sse
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -148,6 +153,16 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	})
 
 	slog.Info("ユーザーがログインしました", "user_id", discordUser.ID, "username", discordUser.Username)
+
+	// SSEでブロードキャスト
+	if h.sseHandler != nil {
+		user := &models.User{
+			DiscordID: discordUser.ID,
+			Username:  discordUser.Username,
+		}
+		h.sseHandler.BroadcastUserLogin(user)
+	}
+
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
