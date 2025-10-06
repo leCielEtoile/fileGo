@@ -191,6 +191,82 @@ main {
     border-color: #5865F2;
 }
 
+/* ドラッグ&ドロップゾーン */
+.drop-zone {
+    margin-top: 15px;
+    padding: 60px 20px;
+    border: 3px dashed #D1D5DB;
+    border-radius: 12px;
+    background: #F9FAFB;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.drop-zone:hover {
+    border-color: #5865F2;
+    background: #EEF0FF;
+    transform: translateY(-2px);
+}
+
+.drop-zone-active {
+    border-color: #5865F2;
+    background: #EEF0FF;
+    border-style: solid;
+    transform: scale(1.02);
+}
+
+.drop-zone-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.drop-zone-icon {
+    color: #5865F2;
+    animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.drop-zone-text {
+    font-size: 20px;
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+}
+
+.drop-zone-subtext {
+    font-size: 14px;
+    color: #666;
+    margin: 0;
+}
+
+.drop-zone-button {
+    display: inline-block;
+    padding: 12px 30px;
+    background: #5865F2;
+    color: white;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.drop-zone-button:hover {
+    background: #4752C4;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(88, 101, 242, 0.4);
+}
+
 .upload-progress {
     margin-top: 15px;
 }
