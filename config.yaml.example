@@ -1,6 +1,7 @@
 server:
   port: "8080"
   behind_proxy: true
+  secure_cookie: true  # HTTPSの場合はtrue、HTTP開発環境ではfalse
   trusted_proxies:
     - "172.16.0.0/12"
     - "10.0.0.0/8"

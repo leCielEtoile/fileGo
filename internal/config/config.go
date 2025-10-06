@@ -23,6 +23,7 @@ type ServerConfig struct {
 	Port           string   `yaml:"port"`            // 16 bytes
 	TrustedProxies []string `yaml:"trusted_proxies"` // 24 bytes
 	BehindProxy    bool     `yaml:"behind_proxy"`    // 1 byte
+	SecureCookie   bool     `yaml:"secure_cookie"`   // 1 byte (HTTPS環境でのみtrue)
 }
 
 // DiscordConfig Discord設定

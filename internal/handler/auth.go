@@ -57,7 +57,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   300,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.config.Server.SecureCookie,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -148,8 +148,8 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  expiresAt,
 		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
+		Secure:   h.config.Server.SecureCookie, // HTTPSの場合のみtrue
+		SameSite: http.SameSiteLaxMode,         // StrictだとOAuth redirectで問題が起きる可能性
 	})
 
 	slog.Info("ユーザーがログインしました", "user_id", discordUser.ID, "username", discordUser.Username)
@@ -182,8 +182,8 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
+		Secure:   h.config.Server.SecureCookie,
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
