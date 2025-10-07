@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*.*.*'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   packages: write
@@ -57,19 +61,17 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ steps.get_version.outputs.version }}
+          name: Release ${{ steps.get_version.outputs.version }}
           body: ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-binaries:
     name: Build Release Binaries
-    needs: create-release
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -94,6 +96,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -112,7 +118,7 @@ jobs:
           CGO_ENABLED: ${{ matrix.cgo }}
           CC: ${{ matrix.goarch == 'arm64' && matrix.cgo == 1 && 'aarch64-linux-gnu-gcc' || 'gcc' }}
         run: |
-          VERSION=${{ needs.create-release.outputs.version }}
+          VERSION=${{ steps.get_version.outputs.version }}
           BINARY_NAME=fileserver-${GOOS}-${GOARCH}
           if [ "$GOOS" = "windows" ]; then
             BINARY_NAME="${BINARY_NAME}.exe"
@@ -133,75 +139,30 @@ jobs:
           fi
 
       - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ env.ASSET }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ env.ASSET }}
-          asset_name: ${{ env.ASSET }}
-          asset_content_type: application/octet-stream
-
-  build-docker:
-    name: Build and Push Docker Image for Release
-    needs: create-release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ needs.create-release.outputs.version }}
-            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
-            VCS_REF=${{ github.sha }}
 
   post-release:
     name: Post-Release Tasks
-    needs: [create-release, build-binaries, build-docker]
+    needs: [create-release, build-binaries]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
       - name: Send notification
         run: |
-          echo "Release ${{ needs.create-release.outputs.version }} completed successfully!"
-          echo "Docker image: ghcr.io/${{ github.repository }}:${{ needs.create-release.outputs.version }}"
+          echo "Release ${{ steps.get_version.outputs.version }} completed successfully!"
+          echo "Docker image: ghcr.io/${{ github.repository }}:${{ steps.get_version.outputs.version }}"
           echo "Binaries uploaded to GitHub Releases"
+          echo "Docker images are built by CI workflow"
 
       # Uncomment to send Discord notification
       # - name: Send Discord Webhook
@@ -209,7 +170,7 @@ jobs:
       #   if: always()
       #   with:
       #     webhook: ${{ secrets.DISCORD_WEBHOOK }}
-      #     title: "Release ${{ needs.create-release.outputs.version }}"
+      #     title: "Release ${{ steps.get_version.outputs.version }}"
       #     description: "New version released!"
       #     color: 0x00ff00
-      #     url: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.create-release.outputs.version }}
+      #     url: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.get_version.outputs.version }}
