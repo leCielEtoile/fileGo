@@ -14,7 +14,6 @@ const state = {
 // ページ読み込み時
 document.addEventListener('DOMContentLoaded', async () => {
     await checkAuth();
-    setupEventListeners();
 });
 
 // 認証チェック
@@ -62,6 +61,9 @@ function showAppSection() {
             ログアウト
         </a>
     `;
+
+    // イベントリスナー設定（DOM表示後）
+    setupEventListeners();
 
     // ログイン成功トースト
     if (window.toast) {

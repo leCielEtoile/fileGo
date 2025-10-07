@@ -82,8 +82,8 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	// userディレクトリの場合、ユーザー個別ディレクトリを自動作成
 	if strings.HasPrefix(directory, "user/") {
-		if err := h.storageManager.EnsureUserDirectory(user.DiscordID); err != nil {
-			slog.Error("ユーザーディレクトリ作成エラー", "error", err)
+		if ensureErr := h.storageManager.EnsureUserDirectory(user.DiscordID); ensureErr != nil {
+			slog.Error("ユーザーディレクトリ作成エラー", "error", ensureErr)
 			http.Error(w, "ユーザーディレクトリの作成に失敗しました", http.StatusInternalServerError)
 			return
 		}

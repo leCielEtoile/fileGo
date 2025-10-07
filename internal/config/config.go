@@ -20,8 +20,8 @@ type Config struct {
 
 // ServerConfig サーバー設定
 type ServerConfig struct {
-	Port        string   `yaml:"port"`         // 16 bytes
-	ServiceName string   `yaml:"service_name"` // 16 bytes
+	Port           string   `yaml:"port"`            // 16 bytes
+	ServiceName    string   `yaml:"service_name"`    // 16 bytes
 	TrustedProxies []string `yaml:"trusted_proxies"` // 24 bytes
 	BehindProxy    bool     `yaml:"behind_proxy"`    // 1 byte
 	SecureCookie   bool     `yaml:"secure_cookie"`   // 1 byte (HTTPS環境でのみtrue)
@@ -44,24 +44,24 @@ type DatabaseConfig struct {
 
 // StorageConfig ストレージ設定
 type StorageConfig struct {
-	UploadPath           string            `yaml:"upload_path"`            // 16 bytes
-	Directories          []DirectoryConfig `yaml:"directories"`            // 24 bytes
-	AdminRoleID          string            `yaml:"admin_role_id"`          // 16 bytes
-	UploadSessionTTL     time.Duration     `yaml:"upload_session_ttl"`     // 8 bytes
-	CleanupInterval      time.Duration     `yaml:"cleanup_interval"`       // 8 bytes
-	MaxFileSize          int64             `yaml:"max_file_size"`          // 8 bytes
-	ChunkSize            int64             `yaml:"chunk_size"`             // 8 bytes
-	MaxChunkFileSize     int64             `yaml:"max_chunk_file_size"`    // 8 bytes
-	MaxConcurrentUploads int               `yaml:"max_concurrent_uploads"` // 8 bytes
-	ChunkUploadEnabled   bool              `yaml:"chunk_upload_enabled"`   // 1 byte
+	UploadPath           string            `yaml:"upload_path"`
+	AdminRoleID          string            `yaml:"admin_role_id"`
+	Directories          []DirectoryConfig `yaml:"directories"`
+	MaxFileSize          int64             `yaml:"max_file_size"`
+	ChunkSize            int64             `yaml:"chunk_size"`
+	MaxChunkFileSize     int64             `yaml:"max_chunk_file_size"`
+	UploadSessionTTL     time.Duration     `yaml:"upload_session_ttl"`
+	CleanupInterval      time.Duration     `yaml:"cleanup_interval"`
+	MaxConcurrentUploads int               `yaml:"max_concurrent_uploads"`
+	ChunkUploadEnabled   bool              `yaml:"chunk_upload_enabled"`
 }
 
 // DirectoryConfig ディレクトリ設定
 type DirectoryConfig struct {
 	Path          string   `yaml:"path"`
+	Type          string   `yaml:"type"`
 	RequiredRoles []string `yaml:"required_roles"`
 	Permissions   []string `yaml:"permissions"`
-	Type          string   `yaml:"type"` // "user_private" でユーザー個別ディレクトリを示す
 }
 
 // Load 設定ファイルを読み込み、環境変数で上書きする
