@@ -96,26 +96,40 @@ function renderDirectories() {
     }
 
     container.innerHTML = state.directories.map(dir => `
-        <div class="cursor-pointer p-4 rounded-xl border-2 transition-all ${
+        <div class="cursor-pointer p-5 rounded-xl border-2 transition-all transform hover:scale-105 ${
             state.selectedDirectory === dir.path
-                ? 'border-discord-500 bg-discord-50 dark:bg-discord-900/20 shadow-lg'
-                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700 hover:border-discord-500 hover:shadow-md'
+                ? 'border-discord-500 bg-gradient-to-br from-discord-50 to-discord-100 dark:from-discord-900/30 dark:to-discord-900/20 shadow-xl ring-4 ring-discord-500/20'
+                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700 hover:border-discord-400 hover:shadow-lg'
         }"
              onclick="selectDirectory('${dir.path}')">
-            <div class="flex items-center gap-2 mb-3">
-                <svg class="w-6 h-6 text-discord-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
-                </svg>
-                <span class="font-bold text-lg text-gray-800 dark:text-white">${dir.path}</span>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-discord-500/10 flex items-center justify-center">
+                    <svg class="w-7 h-7 text-discord-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                    </svg>
+                </div>
+                <span class="font-bold text-xl text-gray-800 dark:text-white flex-1">${dir.path}</span>
+                ${state.selectedDirectory === dir.path ? '<svg class="w-6 h-6 text-discord-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>' : ''}
             </div>
             <div class="flex gap-2 flex-wrap">
-                ${dir.permissions.map(p => `
-                    <span class="px-2 py-1 text-xs font-semibold rounded-md ${
-                        p === 'read' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
-                        p === 'write' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
-                        'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                    }">${p}</span>
-                `).join('')}
+                ${dir.permissions.map(p => {
+                    const iconMap = {
+                        'read': '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>',
+                        'write': '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>',
+                        'delete': '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>'
+                    };
+                    const colorMap = {
+                        'read': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+                        'write': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+                        'delete': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                    };
+                    return `
+                    <span class="px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1.5 ${colorMap[p] || 'bg-gray-100 text-gray-700'}">
+                        ${iconMap[p] || ''}
+                        ${p.toUpperCase()}
+                    </span>
+                    `;
+                }).join('')}
             </div>
         </div>
     `).join('');
@@ -126,13 +140,6 @@ async function selectDirectory(path) {
     state.selectedDirectory = path;
     renderDirectories();
     await loadFiles(path);
-
-    // アップロードボタン有効化
-    const selectedDir = state.directories.find(d => d.path === path);
-    const canWrite = selectedDir && selectedDir.permissions.includes('write');
-
-    document.getElementById('upload-btn').disabled = !canWrite;
-    document.getElementById('chunk-upload-btn').disabled = !canWrite;
 }
 
 // ファイル一覧読み込み
@@ -168,81 +175,75 @@ function renderFiles() {
     const selectedDir = state.directories.find(d => d.path === state.selectedDirectory);
     const canDelete = selectedDir && selectedDir.permissions.includes('delete');
 
-    container.innerHTML = state.files.map(file => {
-        const filename = file.original_name || file.filename;
-        const fileIcon = window.getFileIcon ? window.getFileIcon(filename) : { icon: '📁', color: 'text-gray-500', bg: 'bg-gray-50' };
+    // グリッド表示
+    container.innerHTML = `
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            ${state.files.map(file => {
+                const filename = file.original_name || file.filename;
+                const fileIcon = window.getFileIcon ? window.getFileIcon(filename) : { icon: '📁', color: 'text-gray-500', bg: 'bg-gray-50' };
 
-        return `
-        <div class="flex items-center gap-4 p-4 bg-white dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 hover:shadow-lg transition-all group">
-            <div class="flex-shrink-0 w-12 h-12 ${fileIcon.bg} rounded-lg flex items-center justify-center text-2xl">
-                ${fileIcon.icon}
-            </div>
-            <div class="flex-1 min-w-0">
-                <div class="font-semibold text-gray-800 dark:text-white truncate">${filename}</div>
-                <div class="text-sm text-gray-500 dark:text-gray-400">
-                    ${formatFileSize(file.size)} • ${formatDate(file.modified_at)}
+                return `
+                <div class="flex items-center gap-4 p-4 bg-white dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 hover:shadow-lg hover:border-discord-500 transition-all group">
+                    <div class="flex-shrink-0 w-16 h-16 ${fileIcon.bg} rounded-xl flex items-center justify-center text-3xl shadow-sm">
+                        ${fileIcon.icon}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-bold text-gray-800 dark:text-white truncate text-lg mb-1" title="${filename}">${filename}</div>
+                        <div class="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+                            <span class="flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                                </svg>
+                                ${formatFileSize(file.size)}
+                            </span>
+                            <span class="flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                ${formatDate(file.modified_at)}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <button onclick="downloadFile('${file.filename}')"
+                                class="px-4 py-2 bg-discord-500 hover:bg-discord-600 text-white font-semibold rounded-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                            </svg>
+                            <span class="hidden xl:inline">ダウンロード</span>
+                        </button>
+                        ${canDelete ? `
+                            <button onclick="deleteFile('${file.filename}')"
+                                    class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 1 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                                <span class="hidden xl:inline">削除</span>
+                            </button>
+                        ` : ''}
+                    </div>
                 </div>
-            </div>
-            <div class="flex gap-2">
-                <button onclick="downloadFile('${file.filename}')"
-                        class="px-4 py-2 bg-discord-500 hover:bg-discord-600 text-white font-medium rounded-lg transition-all transform hover:scale-105">
-                    <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                    </svg>
-                    ダウンロード
-                </button>
-                ${canDelete ? `
-                    <button onclick="deleteFile('${file.filename}')"
-                            class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-all transform hover:scale-105">
-                        <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                        </svg>
-                        削除
-                    </button>
-                ` : ''}
-            </div>
+                `;
+            }).join('')}
         </div>
-        `;
-    }).join('');
+    `;
 }
 
 // イベントリスナー設定
 function setupEventListeners() {
-    // 通常アップロード
-    document.getElementById('upload-btn').addEventListener('click', handleUpload);
-
-    // チャンクアップロード
-    document.getElementById('chunk-upload-btn').addEventListener('click', handleChunkUpload);
-
     // ドラッグ&ドロップ
     setupDragAndDrop();
 }
 
 // ドラッグ&ドロップ設定
 function setupDragAndDrop() {
-    const uploadSection = document.querySelector('.upload-section');
-    const dropZone = document.createElement('div');
-    dropZone.className = 'drop-zone';
-    dropZone.innerHTML = `
-        <div class="drop-zone-content">
-            <svg class="drop-zone-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <p class="drop-zone-text">ファイルをドラッグ&ドロップ</p>
-            <p class="drop-zone-subtext">または</p>
-            <label for="file-input" class="drop-zone-button">ファイルを選択</label>
-        </div>
-    `;
-
-    // 既存のupload-boxを置き換え
-    const uploadBox = uploadSection.querySelector('.upload-box');
-    uploadBox.replaceWith(dropZone);
-
-    // ファイル入力を隠す
+    const dropZone = document.getElementById('upload-drop-zone');
     const fileInput = document.getElementById('file-input');
-    fileInput.style.display = 'none';
+
+    if (!dropZone || !fileInput) {
+        console.error('Drop zone or file input not found');
+        return;
+    }
 
     // ドラッグイベント
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -255,16 +256,18 @@ function setupDragAndDrop() {
         e.stopPropagation();
     }
 
-    // ハイライト
+    // ハイライト（Tailwindクラスを使用）
     ['dragenter', 'dragover'].forEach(eventName => {
         dropZone.addEventListener(eventName, () => {
-            dropZone.classList.add('drop-zone-active');
+            dropZone.classList.add('border-discord-500', 'bg-discord-50', 'dark:bg-discord-900/20', 'scale-105');
+            dropZone.classList.remove('border-gray-300', 'dark:border-gray-600');
         });
     });
 
     ['dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, () => {
-            dropZone.classList.remove('drop-zone-active');
+            dropZone.classList.remove('border-discord-500', 'bg-discord-50', 'dark:bg-discord-900/20', 'scale-105');
+            dropZone.classList.add('border-gray-300', 'dark:border-gray-600');
         });
     });
 
@@ -276,17 +279,11 @@ function setupDragAndDrop() {
         }
     });
 
-    // クリックでファイル選択
-    dropZone.addEventListener('click', (e) => {
-        if (e.target !== fileInput && !e.target.closest('label')) {
-            fileInput.click();
-        }
-    });
-
     // ファイル選択時
     fileInput.addEventListener('change', (e) => {
         if (fileInput.files.length > 0) {
             handleDroppedFiles(Array.from(fileInput.files));
+            fileInput.value = ''; // リセット
         }
     });
 }
@@ -432,134 +429,6 @@ async function uploadFileInChunks(file) {
     }
 }
 
-// 通常アップロード
-async function handleUpload() {
-    const fileInput = document.getElementById('file-input');
-    const file = fileInput.files[0];
-
-    if (!file) {
-        if (window.toast) toast.warning('ファイルを選択してください');
-        return;
-    }
-
-    if (file.size > 100 * 1024 * 1024) {
-        if (window.toast) toast.warning('ファイルサイズが100MBを超えています。大容量アップロードを使用してください。');
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('directory', state.selectedDirectory);
-
-    showProgress(true);
-
-    try {
-        const response = await fetch('/files/upload', {
-            method: 'POST',
-            body: formData,
-            credentials: 'include'
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            addActivityLog('upload', `${file.name} をアップロードしました`);
-            if (window.toast) toast.success(`${file.name} のアップロードが完了しました`);
-            await loadFiles(state.selectedDirectory);
-            fileInput.value = '';
-        } else {
-            const error = await response.text();
-            addActivityLog('error', `アップロード失敗: ${error}`);
-            if (window.toast) toast.error(`アップロード失敗: ${error}`);
-        }
-    } catch (error) {
-        console.error('アップロードエラー:', error);
-        addActivityLog('error', 'アップロードに失敗しました');
-        if (window.toast) toast.error('アップロードに失敗しました');
-    } finally {
-        showProgress(false);
-    }
-}
-
-// チャンクアップロード
-async function handleChunkUpload() {
-    const fileInput = document.getElementById('file-input');
-    const file = fileInput.files[0];
-
-    if (!file) {
-        if (window.toast) toast.warning('ファイルを選択してください');
-        return;
-    }
-
-    const chunkSize = 20 * 1024 * 1024; // 20MB
-    const totalChunks = Math.ceil(file.size / chunkSize);
-
-    showProgress(true);
-    setProgress(0);
-
-    try {
-        // 初期化
-        const initResponse = await fetch('/files/chunk/init', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filename: file.name,
-                directory: state.selectedDirectory,
-                file_size: file.size,
-                chunk_size: chunkSize
-            }),
-            credentials: 'include'
-        });
-
-        if (!initResponse.ok) {
-            throw new Error('チャンクアップロードの初期化に失敗しました');
-        }
-
-        const { upload_id } = await initResponse.json();
-        addActivityLog('upload', `チャンクアップロード開始: ${file.name}`);
-
-        // 各チャンクをアップロード
-        for (let i = 0; i < totalChunks; i++) {
-            const start = i * chunkSize;
-            const end = Math.min(start + chunkSize, file.size);
-            const chunk = file.slice(start, end);
-
-            const uploadResponse = await fetch(`/files/chunk/upload/${upload_id}?chunk_index=${i}`, {
-                method: 'POST',
-                body: chunk,
-                credentials: 'include'
-            });
-
-            if (!uploadResponse.ok) {
-                throw new Error(`チャンク ${i + 1} のアップロードに失敗しました`);
-            }
-
-            const progress = Math.round(((i + 1) / totalChunks) * 100);
-            setProgress(progress);
-        }
-
-        // 完了
-        const completeResponse = await fetch(`/files/chunk/complete/${upload_id}`, {
-            method: 'POST',
-            credentials: 'include'
-        });
-
-        if (!completeResponse.ok) {
-            throw new Error('チャンクアップロードの完了に失敗しました');
-        }
-
-        addActivityLog('upload', `${file.name} のアップロードが完了しました`);
-        if (window.toast) toast.success(`${file.name} のアップロードが完了しました`);
-        await loadFiles(state.selectedDirectory);
-        fileInput.value = '';
-
-    } catch (error) {
-        console.error('チャンクアップロードエラー:', error);
-        addActivityLog('error', error.message);
-        if (window.toast) toast.error(error.message);
-    } finally {
-        showProgress(false);
-    }
-}
 
 // ファイルダウンロード
 function downloadFile(filename) {

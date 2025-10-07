@@ -89,17 +89,27 @@
                 <!-- ファイルアップロード -->
                 <section>
                     <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-4">ファイルアップロード</h2>
-                    <div class="upload-section">
-                        <div class="upload-box">
-                            <input type="file" id="file-input" class="file-input">
-                            <button id="upload-btn" class="btn btn-primary" disabled>アップロード</button>
-                            <button id="chunk-upload-btn" class="btn btn-secondary" disabled>大容量アップロード</button>
+                    <div id="upload-drop-zone" class="bg-white dark:bg-gray-700 rounded-xl border-3 border-dashed border-gray-300 dark:border-gray-600 p-8 text-center transition-all hover:border-discord-500 hover:bg-discord-50 dark:hover:bg-discord-900/10 cursor-pointer">
+                        <input type="file" id="file-input" class="hidden" multiple>
+                        <svg class="w-16 h-16 mx-auto mb-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                        <p class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-2">ファイルをドラッグ&ドロップ</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">または</p>
+                        <button type="button" onclick="document.getElementById('file-input').click()" class="px-6 py-3 bg-discord-500 hover:bg-discord-600 text-white font-semibold rounded-lg transition-all transform hover:scale-105">
+                            ファイルを選択
+                        </button>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-4">100MB以下は通常アップロード、それ以上は自動でチャンクアップロード</p>
+                    </div>
+
+                    <!-- プログレスバー -->
+                    <div id="upload-progress" class="hidden mt-4 bg-white dark:bg-gray-700 rounded-xl p-4 shadow-lg">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-gray-700 dark:text-gray-200">アップロード中...</span>
+                            <span id="progress-text" class="text-sm font-bold text-discord-500">0%</span>
                         </div>
-                        <div id="upload-progress" class="upload-progress hidden">
-                            <div class="progress-bar">
-                                <div id="progress-fill" class="progress-fill"></div>
-                            </div>
-                            <div id="progress-text" class="progress-text">0%</div>
+                        <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3 overflow-hidden">
+                            <div id="progress-fill" class="bg-gradient-to-r from-discord-500 to-discord-600 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
                         </div>
                     </div>
                 </section>
@@ -160,7 +170,7 @@
         </template>
     </div>
 
-    <script src="/static/js/app.js"></script>
     <script src="/static/js/alpine-components.js"></script>
+    <script src="/static/js/app.js"></script>
 </body>
 </html>
