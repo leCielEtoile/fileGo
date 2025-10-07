@@ -45,6 +45,7 @@ type DatabaseConfig struct {
 type StorageConfig struct {
 	UploadPath           string            `yaml:"upload_path"`            // 16 bytes
 	Directories          []DirectoryConfig `yaml:"directories"`            // 24 bytes
+	AdminRoleID          string            `yaml:"admin_role_id"`          // 16 bytes
 	UploadSessionTTL     time.Duration     `yaml:"upload_session_ttl"`     // 8 bytes
 	CleanupInterval      time.Duration     `yaml:"cleanup_interval"`       // 8 bytes
 	MaxFileSize          int64             `yaml:"max_file_size"`          // 8 bytes
@@ -59,6 +60,7 @@ type DirectoryConfig struct {
 	Path          string   `yaml:"path"`
 	RequiredRoles []string `yaml:"required_roles"`
 	Permissions   []string `yaml:"permissions"`
+	Type          string   `yaml:"type"` // "user_private" でユーザー個別ディレクトリを示す
 }
 
 // Load 設定ファイルを読み込み、環境変数で上書きする
