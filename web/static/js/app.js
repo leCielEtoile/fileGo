@@ -712,8 +712,7 @@ function connectSSE() {
     eventSource.onopen = () => {
         statusEl.textContent = '接続済み';
         statusEl.className = 'sse-status connected';
-        addActivityLog('system', 'リアルタイム更新に接続しました');
-        if (window.toast) toast.info('リアルタイム更新に接続しました', 3000);
+        // sse-status connected で視覚的に表示されるため、アクティビティログは非表示
         // 接続成功したら再接続カウンターをリセット
         state.sseReconnectCount = 0;
     };
@@ -721,8 +720,7 @@ function connectSSE() {
     eventSource.onerror = () => {
         statusEl.textContent = '切断';
         statusEl.className = 'sse-status disconnected';
-        addActivityLog('error', 'リアルタイム更新が切断されました');
-        if (window.toast) toast.warning('リアルタイム更新が切断されました', 3000);
+        // sse-status disconnected で視覚的に表示されるため、アクティビティログは非表示
 
         // 指数バックオフで再接続（最大30秒）
         state.sseReconnectCount = (state.sseReconnectCount || 0) + 1;
