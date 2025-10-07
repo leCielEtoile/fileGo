@@ -50,12 +50,19 @@ function showAppSection() {
     document.getElementById('login-section').classList.add('hidden');
     document.getElementById('app-section').classList.remove('hidden');
 
-    // ユーザー情報表示
+    // ユーザー情報表示（Tailwind スタイル）
     const userInfo = document.getElementById('user-info');
     userInfo.innerHTML = `
-        <span>${state.user.username}</span>
-        <a href="/auth/logout" class="btn btn-danger">ログアウト</a>
+        <span class="text-white font-medium">${state.user.username}</span>
+        <a href="/auth/logout" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors">
+            ログアウト
+        </a>
     `;
+
+    // ログイン成功トースト
+    if (window.toast) {
+        toast.success('ログインしました');
+    }
 }
 
 // ディレクトリ一覧読み込み
@@ -69,10 +76,13 @@ async function loadDirectories() {
             const data = await response.json();
             state.directories = data.directories || [];
             renderDirectories();
+        } else {
+            if (window.toast) toast.error('ディレクトリの読み込みに失敗しました');
         }
     } catch (error) {
         console.error('ディレクトリ読み込みエラー:', error);
         addActivityLog('error', 'ディレクトリの読み込みに失敗しました');
+        if (window.toast) toast.error('ディレクトリの読み込みに失敗しました');
     }
 }
 
@@ -81,16 +91,31 @@ function renderDirectories() {
     const container = document.getElementById('directory-list');
 
     if (state.directories.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>アクセス可能なディレクトリがありません</p></div>';
+        container.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400"><p>アクセス可能なディレクトリがありません</p></div>';
         return;
     }
 
     container.innerHTML = state.directories.map(dir => `
-        <div class="directory-card ${state.selectedDirectory === dir.path ? 'active' : ''}"
+        <div class="cursor-pointer p-4 rounded-xl border-2 transition-all ${
+            state.selectedDirectory === dir.path
+                ? 'border-discord-500 bg-discord-50 dark:bg-discord-900/20 shadow-lg'
+                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700 hover:border-discord-500 hover:shadow-md'
+        }"
              onclick="selectDirectory('${dir.path}')">
-            <div class="directory-name">${dir.path}</div>
-            <div class="directory-permissions">
-                ${dir.permissions.map(p => `<span class="permission-badge">${p}</span>`).join('')}
+            <div class="flex items-center gap-2 mb-3">
+                <svg class="w-6 h-6 text-discord-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                </svg>
+                <span class="font-bold text-lg text-gray-800 dark:text-white">${dir.path}</span>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+                ${dir.permissions.map(p => `
+                    <span class="px-2 py-1 text-xs font-semibold rounded-md ${
+                        p === 'read' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                        p === 'write' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                        'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                    }">${p}</span>
+                `).join('')}
             </div>
         </div>
     `).join('');
@@ -121,10 +146,13 @@ async function loadFiles(directory) {
             const data = await response.json();
             state.files = data.files || [];
             renderFiles();
+        } else {
+            if (window.toast) toast.error('ファイル一覧の取得に失敗しました');
         }
     } catch (error) {
         console.error('ファイル読み込みエラー:', error);
         addActivityLog('error', 'ファイル一覧の取得に失敗しました');
+        if (window.toast) toast.error('ファイル一覧の取得に失敗しました');
     }
 }
 
@@ -133,27 +161,49 @@ function renderFiles() {
     const container = document.getElementById('files-list');
 
     if (state.files.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>ファイルがありません</p></div>';
+        container.innerHTML = '<div class="text-center py-12 text-gray-500 dark:text-gray-400"><p>ファイルがありません</p></div>';
         return;
     }
 
     const selectedDir = state.directories.find(d => d.path === state.selectedDirectory);
     const canDelete = selectedDir && selectedDir.permissions.includes('delete');
 
-    container.innerHTML = state.files.map(file => `
-        <div class="file-item">
-            <div class="file-info">
-                <div class="file-name">${file.original_name || file.filename}</div>
-                <div class="file-meta">
+    container.innerHTML = state.files.map(file => {
+        const filename = file.original_name || file.filename;
+        const fileIcon = window.getFileIcon ? window.getFileIcon(filename) : { icon: '📁', color: 'text-gray-500', bg: 'bg-gray-50' };
+
+        return `
+        <div class="flex items-center gap-4 p-4 bg-white dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 hover:shadow-lg transition-all group">
+            <div class="flex-shrink-0 w-12 h-12 ${fileIcon.bg} rounded-lg flex items-center justify-center text-2xl">
+                ${fileIcon.icon}
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="font-semibold text-gray-800 dark:text-white truncate">${filename}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">
                     ${formatFileSize(file.size)} • ${formatDate(file.modified_at)}
                 </div>
             </div>
-            <div class="file-actions">
-                <button class="btn btn-primary" onclick="downloadFile('${file.filename}')">ダウンロード</button>
-                ${canDelete ? `<button class="btn btn-danger" onclick="deleteFile('${file.filename}')">削除</button>` : ''}
+            <div class="flex gap-2">
+                <button onclick="downloadFile('${file.filename}')"
+                        class="px-4 py-2 bg-discord-500 hover:bg-discord-600 text-white font-medium rounded-lg transition-all transform hover:scale-105">
+                    <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </svg>
+                    ダウンロード
+                </button>
+                ${canDelete ? `
+                    <button onclick="deleteFile('${file.filename}')"
+                            class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-all transform hover:scale-105">
+                        <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        削除
+                    </button>
+                ` : ''}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // イベントリスナー設定
@@ -244,7 +294,7 @@ function setupDragAndDrop() {
 // ドロップされたファイルの処理
 async function handleDroppedFiles(files) {
     if (!state.selectedDirectory) {
-        alert('ディレクトリを選択してください');
+        if (window.toast) toast.warning('ディレクトリを選択してください');
         return;
     }
 
@@ -252,7 +302,7 @@ async function handleDroppedFiles(files) {
     const canWrite = selectedDir && selectedDir.permissions.includes('write');
 
     if (!canWrite) {
-        alert('このディレクトリへの書き込み権限がありません');
+        if (window.toast) toast.error('このディレクトリへの書き込み権限がありません');
         return;
     }
 
@@ -293,15 +343,18 @@ async function uploadFileNormal(file) {
         if (response.ok) {
             const data = await response.json();
             addActivityLog('upload', `${file.name} をアップロードしました`);
+            if (window.toast) toast.success(`${file.name} のアップロードが完了しました`);
             setProgress(100);
             await loadFiles(state.selectedDirectory);
         } else {
             const error = await response.text();
             addActivityLog('error', `アップロード失敗: ${error}`);
+            if (window.toast) toast.error(`アップロード失敗: ${error}`);
         }
     } catch (error) {
         console.error('アップロードエラー:', error);
         addActivityLog('error', 'アップロードに失敗しました');
+        if (window.toast) toast.error('アップロードに失敗しました');
     } finally {
         setTimeout(() => showProgress(false), 500);
     }
@@ -367,11 +420,13 @@ async function uploadFileInChunks(file) {
         }
 
         addActivityLog('upload', `${file.name} のアップロードが完了しました`);
+        if (window.toast) toast.success(`${file.name} のアップロードが完了しました`);
         await loadFiles(state.selectedDirectory);
 
     } catch (error) {
         console.error('チャンクアップロードエラー:', error);
         addActivityLog('error', error.message);
+        if (window.toast) toast.error(error.message);
     } finally {
         setTimeout(() => showProgress(false), 500);
     }
@@ -383,12 +438,12 @@ async function handleUpload() {
     const file = fileInput.files[0];
 
     if (!file) {
-        alert('ファイルを選択してください');
+        if (window.toast) toast.warning('ファイルを選択してください');
         return;
     }
 
     if (file.size > 100 * 1024 * 1024) {
-        alert('ファイルサイズが100MBを超えています。大容量アップロードを使用してください。');
+        if (window.toast) toast.warning('ファイルサイズが100MBを超えています。大容量アップロードを使用してください。');
         return;
     }
 
@@ -408,15 +463,18 @@ async function handleUpload() {
         if (response.ok) {
             const data = await response.json();
             addActivityLog('upload', `${file.name} をアップロードしました`);
+            if (window.toast) toast.success(`${file.name} のアップロードが完了しました`);
             await loadFiles(state.selectedDirectory);
             fileInput.value = '';
         } else {
             const error = await response.text();
             addActivityLog('error', `アップロード失敗: ${error}`);
+            if (window.toast) toast.error(`アップロード失敗: ${error}`);
         }
     } catch (error) {
         console.error('アップロードエラー:', error);
         addActivityLog('error', 'アップロードに失敗しました');
+        if (window.toast) toast.error('アップロードに失敗しました');
     } finally {
         showProgress(false);
     }
@@ -428,7 +486,7 @@ async function handleChunkUpload() {
     const file = fileInput.files[0];
 
     if (!file) {
-        alert('ファイルを選択してください');
+        if (window.toast) toast.warning('ファイルを選択してください');
         return;
     }
 
@@ -490,12 +548,14 @@ async function handleChunkUpload() {
         }
 
         addActivityLog('upload', `${file.name} のアップロードが完了しました`);
+        if (window.toast) toast.success(`${file.name} のアップロードが完了しました`);
         await loadFiles(state.selectedDirectory);
         fileInput.value = '';
 
     } catch (error) {
         console.error('チャンクアップロードエラー:', error);
         addActivityLog('error', error.message);
+        if (window.toast) toast.error(error.message);
     } finally {
         showProgress(false);
     }
@@ -506,6 +566,7 @@ function downloadFile(filename) {
     const url = `/files/download/${encodeURIComponent(state.selectedDirectory)}/${encodeURIComponent(filename)}`;
     window.location.href = url;
     addActivityLog('download', `${filename} をダウンロードしました`);
+    if (window.toast) toast.info(`${filename} のダウンロードを開始しました`);
 }
 
 // ファイル削除
@@ -522,14 +583,17 @@ async function deleteFile(filename) {
 
         if (response.ok) {
             addActivityLog('delete', `${filename} を削除しました`);
+            if (window.toast) toast.success(`${filename} を削除しました`);
             await loadFiles(state.selectedDirectory);
         } else {
             const error = await response.text();
             addActivityLog('error', `削除失敗: ${error}`);
+            if (window.toast) toast.error(`削除失敗: ${error}`);
         }
     } catch (error) {
         console.error('削除エラー:', error);
         addActivityLog('error', 'ファイルの削除に失敗しました');
+        if (window.toast) toast.error('ファイルの削除に失敗しました');
     }
 }
 
@@ -566,12 +630,14 @@ function connectSSE() {
         statusEl.textContent = '接続済み';
         statusEl.className = 'sse-status connected';
         addActivityLog('system', 'リアルタイム更新に接続しました');
+        if (window.toast) toast.info('リアルタイム更新に接続しました', 3000);
     };
 
     eventSource.onerror = () => {
         statusEl.textContent = '切断';
         statusEl.className = 'sse-status disconnected';
         addActivityLog('error', 'リアルタイム更新が切断されました');
+        if (window.toast) toast.warning('リアルタイム更新が切断されました', 3000);
 
         // 再接続
         setTimeout(() => {
