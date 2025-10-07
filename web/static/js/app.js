@@ -4,7 +4,11 @@ const state = {
     directories: [],
     selectedDirectory: null,
     files: [],
-    eventSource: null
+    filteredFiles: [],
+    eventSource: null,
+    viewMode: 'list', // 'list' or 'grid'
+    sortBy: 'name-asc',
+    searchQuery: ''
 };
 
 // ページ読み込み時
@@ -86,59 +90,66 @@ async function loadDirectories() {
     }
 }
 
-// ディレクトリ描画
+// ディレクトリ描画（サイドバー用）
 function renderDirectories() {
     const container = document.getElementById('directory-list');
 
     if (state.directories.length === 0) {
-        container.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400"><p>アクセス可能なディレクトリがありません</p></div>';
+        container.innerHTML = '<div class="p-4 text-center text-sm text-gray-500 dark:text-gray-400">アクセス可能なフォルダがありません</div>';
         return;
     }
 
     container.innerHTML = state.directories.map(dir => `
-        <div class="cursor-pointer p-5 rounded-xl border-2 transition-all transform hover:scale-105 ${
+        <div class="cursor-pointer px-3 py-2 rounded-lg transition-all mb-1 ${
             state.selectedDirectory === dir.path
-                ? 'border-discord-500 bg-gradient-to-br from-discord-50 to-discord-100 dark:from-discord-900/30 dark:to-discord-900/20 shadow-xl ring-4 ring-discord-500/20'
-                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700 hover:border-discord-400 hover:shadow-lg'
+                ? 'bg-discord-500 text-white shadow-md'
+                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
         }"
              onclick="selectDirectory('${dir.path}')">
-            <div class="flex items-center gap-3 mb-4">
-                <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-discord-500/10 flex items-center justify-center">
-                    <svg class="w-7 h-7 text-discord-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
-                    </svg>
-                </div>
-                <span class="font-bold text-xl text-gray-800 dark:text-white flex-1">${dir.path}</span>
-                ${state.selectedDirectory === dir.path ? '<svg class="w-6 h-6 text-discord-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>' : ''}
+            <div class="flex items-center gap-2">
+                <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                </svg>
+                <span class="font-semibold text-sm truncate">${dir.path}</span>
             </div>
-            <div class="flex gap-2 flex-wrap">
+            <div class="flex gap-1 mt-2 flex-wrap">
                 ${dir.permissions.map(p => {
                     const iconMap = {
-                        'read': '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>',
-                        'write': '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>',
-                        'delete': '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>'
+                        'read': '👁',
+                        'write': '✏️',
+                        'delete': '🗑️'
                     };
-                    const colorMap = {
-                        'read': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-                        'write': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-                        'delete': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                    };
-                    return `
-                    <span class="px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1.5 ${colorMap[p] || 'bg-gray-100 text-gray-700'}">
-                        ${iconMap[p] || ''}
-                        ${p.toUpperCase()}
-                    </span>
-                    `;
-                }).join('')}
+                    return `<span class="text-xs opacity-75">${iconMap[p] || p}</span>`;
+                }).join(' ')}
             </div>
         </div>
     `).join('');
 }
 
+// パンくずリスト更新
+function updateBreadcrumb() {
+    const breadcrumb = document.getElementById('breadcrumb');
+    if (!state.selectedDirectory) {
+        breadcrumb.innerHTML = '<span class="text-gray-500 dark:text-gray-400">フォルダを選択してください</span>';
+        return;
+    }
+
+    breadcrumb.innerHTML = `
+        <svg class="w-4 h-4 text-discord-500" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+        </svg>
+        <span class="ml-2 font-semibold text-gray-800 dark:text-white">${state.selectedDirectory}</span>
+        <span class="ml-2 text-gray-500 dark:text-gray-400">(${state.files.length} ファイル)</span>
+    `;
+}
+
 // ディレクトリ選択
 async function selectDirectory(path) {
     state.selectedDirectory = path;
+    state.searchQuery = ''; // 検索クリア
+    document.getElementById('search-input').value = '';
     renderDirectories();
+    updateBreadcrumb();
     await loadFiles(path);
 }
 
@@ -152,7 +163,7 @@ async function loadFiles(directory) {
         if (response.ok) {
             const data = await response.json();
             state.files = data.files || [];
-            renderFiles();
+            applyFilters(); // フィルタ・ソート適用
         } else {
             if (window.toast) toast.error('ファイル一覧の取得に失敗しました');
         }
@@ -163,91 +174,204 @@ async function loadFiles(directory) {
     }
 }
 
-// ファイル一覧描画
+// フィルタ・ソート適用
+function applyFilters() {
+    let filtered = [...state.files];
+
+    // 検索フィルタ
+    if (state.searchQuery) {
+        filtered = filtered.filter(file => {
+            const filename = file.original_name || file.filename;
+            return filename.toLowerCase().includes(state.searchQuery);
+        });
+    }
+
+    // ソート
+    filtered.sort((a, b) => {
+        const aName = (a.original_name || a.filename).toLowerCase();
+        const bName = (b.original_name || b.filename).toLowerCase();
+
+        switch (state.sortBy) {
+            case 'name-asc':
+                return aName.localeCompare(bName);
+            case 'name-desc':
+                return bName.localeCompare(aName);
+            case 'size-asc':
+                return a.size - b.size;
+            case 'size-desc':
+                return b.size - a.size;
+            case 'date-asc':
+                return new Date(a.modified_at) - new Date(b.modified_at);
+            case 'date-desc':
+                return new Date(b.modified_at) - new Date(a.modified_at);
+            default:
+                return 0;
+        }
+    });
+
+    state.filteredFiles = filtered;
+    renderFiles();
+    updateBreadcrumb();
+}
+
+// ファイル一覧描画（リスト/グリッド対応）
 function renderFiles() {
     const container = document.getElementById('files-list');
 
-    if (state.files.length === 0) {
-        container.innerHTML = '<div class="text-center py-12 text-gray-500 dark:text-gray-400"><p>ファイルがありません</p></div>';
+    if (state.filteredFiles.length === 0) {
+        if (state.searchQuery) {
+            container.innerHTML = '<div class="text-center py-16"><p class="text-gray-500 dark:text-gray-400 text-lg">「<span class="font-semibold">' + state.searchQuery + '</span>」に一致するファイルが見つかりませんでした</p></div>';
+        } else {
+            container.innerHTML = '<div class="text-center py-16"><p class="text-gray-500 dark:text-gray-400 text-lg">ファイルがありません</p></div>';
+        }
         return;
     }
 
     const selectedDir = state.directories.find(d => d.path === state.selectedDirectory);
     const canDelete = selectedDir && selectedDir.permissions.includes('delete');
 
-    // グリッド表示
-    container.innerHTML = `
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            ${state.files.map(file => {
-                const filename = file.original_name || file.filename;
-                const fileIcon = window.getFileIcon ? window.getFileIcon(filename) : { icon: '📁', color: 'text-gray-500', bg: 'bg-gray-50' };
+    // viewModeを状態から取得
+    const viewMode = state.viewMode;
 
-                return `
-                <div class="flex items-center gap-4 p-4 bg-white dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 hover:shadow-lg hover:border-discord-500 transition-all group">
-                    <div class="flex-shrink-0 w-16 h-16 ${fileIcon.bg} rounded-xl flex items-center justify-center text-3xl shadow-sm">
-                        ${fileIcon.icon}
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="font-bold text-gray-800 dark:text-white truncate text-lg mb-1" title="${filename}">${filename}</div>
-                        <div class="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
-                            <span class="flex items-center gap-1">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
-                                </svg>
-                                ${formatFileSize(file.size)}
-                            </span>
-                            <span class="flex items-center gap-1">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                </svg>
-                                ${formatDate(file.modified_at)}
-                            </span>
+    if (viewMode === 'list') {
+        // リスト表示（Boxスタイルのテーブル）
+        container.innerHTML = `
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                <table class="w-full">
+                    <thead class="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">ファイル名</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">サイズ</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">更新日時</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">アクション</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                        ${state.filteredFiles.map(file => {
+                            const filename = file.original_name || file.filename;
+                            const fileIcon = window.getFileIcon ? window.getFileIcon(filename) : { icon: '📁', color: 'text-gray-500', bg: 'bg-gray-50' };
+
+                            return `
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                <td class="px-6 py-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="flex-shrink-0 w-10 h-10 ${fileIcon.bg} rounded-lg flex items-center justify-center text-xl">
+                                            ${fileIcon.icon}
+                                        </div>
+                                        <span class="font-medium text-gray-800 dark:text-white truncate max-w-md" title="${filename}">${filename}</span>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">${formatFileSize(file.size)}</td>
+                                <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">${formatDate(file.modified_at)}</td>
+                                <td class="px-6 py-4 text-right">
+                                    <div class="flex justify-end gap-2">
+                                        <button onclick="downloadFile('${file.filename}')" title="ダウンロード"
+                                                class="p-2 text-discord-500 hover:bg-discord-50 dark:hover:bg-discord-900/20 rounded-lg transition-all">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                                            </svg>
+                                        </button>
+                                        ${canDelete ? `
+                                            <button onclick="deleteFile('${file.filename}')" title="削除"
+                                                    class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                </svg>
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </td>
+                            </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } else {
+        // グリッド表示
+        container.innerHTML = `
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                ${state.filteredFiles.map(file => {
+                    const filename = file.original_name || file.filename;
+                    const fileIcon = window.getFileIcon ? window.getFileIcon(filename) : { icon: '📁', color: 'text-gray-500', bg: 'bg-gray-50' };
+
+                    return `
+                    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-lg hover:border-discord-500 transition-all group cursor-pointer">
+                        <div class="flex flex-col items-center text-center">
+                            <div class="w-20 h-20 ${fileIcon.bg} rounded-xl flex items-center justify-center text-4xl mb-3">
+                                ${fileIcon.icon}
+                            </div>
+                            <div class="font-semibold text-sm text-gray-800 dark:text-white truncate w-full mb-1" title="${filename}">${filename}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mb-3">${formatFileSize(file.size)}</div>
+                            <div class="flex gap-2 w-full">
+                                <button onclick="downloadFile('${file.filename}')"
+                                        class="flex-1 px-3 py-1.5 bg-discord-500 hover:bg-discord-600 text-white text-xs font-semibold rounded transition-all">
+                                    DL
+                                </button>
+                                ${canDelete ? `
+                                    <button onclick="deleteFile('${file.filename}')"
+                                            class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded transition-all">
+                                        削除
+                                    </button>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
-                    <div class="flex flex-col gap-2">
-                        <button onclick="downloadFile('${file.filename}')"
-                                class="px-4 py-2 bg-discord-500 hover:bg-discord-600 text-white font-semibold rounded-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                            </svg>
-                            <span class="hidden xl:inline">ダウンロード</span>
-                        </button>
-                        ${canDelete ? `
-                            <button onclick="deleteFile('${file.filename}')"
-                                    class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 1 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                </svg>
-                                <span class="hidden xl:inline">削除</span>
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-                `;
-            }).join('')}
-        </div>
-    `;
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
 }
 
 // イベントリスナー設定
 function setupEventListeners() {
     // ドラッグ&ドロップ
     setupDragAndDrop();
+
+    // 検索
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            state.searchQuery = e.target.value.toLowerCase();
+            applyFilters();
+        });
+    }
+
+    // 並べ替え
+    const sortSelect = document.getElementById('sort-select');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', (e) => {
+            state.sortBy = e.target.value;
+            applyFilters();
+        });
+    }
+
+    // ビュー切り替え (Alpine.jsが管理)
+    // Alpine.jsのx-dataでviewModeを管理しているため、ここでは不要
 }
 
-// ドラッグ&ドロップ設定
+// ビュー切り替え関数（HTMLから呼ばれる）
+window.switchViewMode = function(mode) {
+    state.viewMode = mode;
+    renderFiles();
+};
+
+// ドラッグ&ドロップ設定（全画面対応）
 function setupDragAndDrop() {
-    const dropZone = document.getElementById('upload-drop-zone');
+    const dropOverlay = document.getElementById('drop-overlay');
     const fileInput = document.getElementById('file-input');
 
-    if (!dropZone || !fileInput) {
-        console.error('Drop zone or file input not found');
+    if (!dropOverlay || !fileInput) {
+        console.error('Drop overlay or file input not found');
         return;
     }
 
+    let dragCounter = 0;
+
     // ドラッグイベント
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, preventDefaults, false);
         document.body.addEventListener(eventName, preventDefaults, false);
     });
 
@@ -256,23 +380,26 @@ function setupDragAndDrop() {
         e.stopPropagation();
     }
 
-    // ハイライト（Tailwindクラスを使用）
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, () => {
-            dropZone.classList.add('border-discord-500', 'bg-discord-50', 'dark:bg-discord-900/20', 'scale-105');
-            dropZone.classList.remove('border-gray-300', 'dark:border-gray-600');
-        });
+    // ドラッグ開始
+    document.body.addEventListener('dragenter', (e) => {
+        dragCounter++;
+        if (e.dataTransfer.types.includes('Files')) {
+            dropOverlay.classList.remove('hidden');
+        }
     });
 
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, () => {
-            dropZone.classList.remove('border-discord-500', 'bg-discord-50', 'dark:bg-discord-900/20', 'scale-105');
-            dropZone.classList.add('border-gray-300', 'dark:border-gray-600');
-        });
+    // ドラッグ終了
+    document.body.addEventListener('dragleave', (e) => {
+        dragCounter--;
+        if (dragCounter === 0) {
+            dropOverlay.classList.add('hidden');
+        }
     });
 
     // ドロップ処理
-    dropZone.addEventListener('drop', (e) => {
+    document.body.addEventListener('drop', (e) => {
+        dragCounter = 0;
+        dropOverlay.classList.add('hidden');
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) {
             handleDroppedFiles(files);
