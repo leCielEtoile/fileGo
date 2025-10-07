@@ -74,7 +74,7 @@ func (pc *Checker) CheckPermission(userID, directory, permission string) (bool, 
 }
 
 // checkUserPrivatePermission ユーザー個別ディレクトリの権限チェック
-func (pc *Checker) checkUserPrivatePermission(userID, fullPath string, pathParts []string) (bool, error) {
+func (pc *Checker) checkUserPrivatePermission(userID, _ string, pathParts []string) (bool, error) {
 	// /user 直下の場合は、自分のディレクトリのみ見える
 	if len(pathParts) == 1 {
 		return true, nil
