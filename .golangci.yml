@@ -1,4 +1,4 @@
-version: 2
+version: "2"
 
 run:
   timeout: 5m
@@ -64,10 +64,10 @@ linters-settings:
         pattern: "(?i)passwd|password|token|secret"
 
 issues:
-  exclude-dirs:
-    - vendor
-    - .github
-
+  exclude:
+    - path: vendor
+    - path: .github
+  exclude-case-sensitive: false
   exclude-rules:
     # Exclude some linters from running on tests files
     - path: _test\.go
@@ -90,14 +90,8 @@ issues:
   max-same-issues: 0
   max-issues-per-linter: 0
 
-  # Show all issues from a linter
-  new: false
-
 output:
   formats:
-    colored-line-number:
+    - format: colored-line-number
       path: stdout
-  print-issued-lines: true
-  print-linter-name: true
-  unique-by-line: true
-  sort-results: true
+  show-stats: true
