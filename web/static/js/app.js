@@ -484,53 +484,117 @@ async function uploadFileNormal(file) {
     }
 }
 
-// チャンクアップロード（リファクタリング）
+// チャンクアップロード（レジューム対応）
 async function uploadFileInChunks(file) {
     const chunkSize = 20 * 1024 * 1024; // 20MB
     const totalChunks = Math.ceil(file.size / chunkSize);
+    const storageKey = `upload_${file.name}_${file.size}_${state.selectedDirectory}`;
 
     showProgress(true);
     setProgress(0);
 
-    try {
-        // 初期化
-        const initResponse = await fetch('/files/chunk/init', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filename: file.name,
-                directory: state.selectedDirectory,
-                file_size: file.size,
-                chunk_size: chunkSize
-            }),
-            credentials: 'include'
-        });
+    let upload_id = null;
+    let startChunk = 0;
 
-        if (!initResponse.ok) {
-            throw new Error('チャンクアップロードの初期化に失敗しました');
+    try {
+        // localStorage から過去のアップロードセッションを確認
+        const savedSession = localStorage.getItem(storageKey);
+        if (savedSession) {
+            const { uploadId, timestamp } = JSON.parse(savedSession);
+
+            // 48時間以内のセッションのみレジューム対象
+            if (Date.now() - timestamp < 48 * 60 * 60 * 1000) {
+                try {
+                    // サーバーに状態確認
+                    const statusResponse = await fetch(`/files/chunk/status/${uploadId}`, {
+                        credentials: 'include'
+                    });
+
+                    if (statusResponse.ok) {
+                        const status = await statusResponse.json();
+                        upload_id = uploadId;
+                        startChunk = status.uploaded_chunks.length;
+
+                        if (startChunk > 0) {
+                            addActivityLog('upload', `${file.name} のアップロードを再開します (${startChunk}/${totalChunks} チャンク完了)`);
+                            if (window.toast) toast.info(`アップロードを再開します (${Math.round(startChunk / totalChunks * 100)}% 完了)`);
+                            setProgress(Math.round(startChunk / totalChunks * 100));
+                        }
+                    }
+                } catch (err) {
+                    console.log('過去のセッションは利用できません:', err);
+                    localStorage.removeItem(storageKey);
+                }
+            } else {
+                localStorage.removeItem(storageKey);
+            }
         }
 
-        const { upload_id } = await initResponse.json();
-        addActivityLog('upload', `チャンクアップロード開始: ${file.name}`);
+        // 新規セッション作成
+        if (!upload_id) {
+            const initResponse = await fetch('/files/chunk/init', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: file.name,
+                    directory: state.selectedDirectory,
+                    file_size: file.size,
+                    chunk_size: chunkSize
+                }),
+                credentials: 'include'
+            });
 
-        // 各チャンクをアップロード
-        for (let i = 0; i < totalChunks; i++) {
+            if (!initResponse.ok) {
+                throw new Error('チャンクアップロードの初期化に失敗しました');
+            }
+
+            const result = await initResponse.json();
+            upload_id = result.upload_id;
+
+            // セッション情報を保存
+            localStorage.setItem(storageKey, JSON.stringify({
+                uploadId: upload_id,
+                timestamp: Date.now()
+            }));
+
+            addActivityLog('upload', `チャンクアップロード開始: ${file.name}`);
+        }
+
+        // 各チャンクをアップロード（途中から再開可能）
+        for (let i = startChunk; i < totalChunks; i++) {
             const start = i * chunkSize;
             const end = Math.min(start + chunkSize, file.size);
             const chunk = file.slice(start, end);
 
-            const uploadResponse = await fetch(`/files/chunk/upload/${upload_id}?chunk_index=${i}`, {
-                method: 'POST',
-                body: chunk,
-                credentials: 'include'
-            });
+            let retries = 3;
+            let uploaded = false;
 
-            if (!uploadResponse.ok) {
-                throw new Error(`チャンク ${i + 1} のアップロードに失敗しました`);
+            while (retries > 0 && !uploaded) {
+                try {
+                    const uploadResponse = await fetch(`/files/chunk/upload/${upload_id}?chunk_index=${i}`, {
+                        method: 'POST',
+                        body: chunk,
+                        credentials: 'include'
+                    });
+
+                    if (!uploadResponse.ok) {
+                        throw new Error(`チャンク ${i + 1} のアップロードに失敗しました`);
+                    }
+
+                    uploaded = true;
+                    const progress = Math.round(((i + 1) / totalChunks) * 100);
+                    setProgress(progress);
+                } catch (err) {
+                    retries--;
+                    if (retries > 0) {
+                        console.log(`チャンク ${i + 1} のリトライ中... (残り${retries}回)`);
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    } else {
+                        // リトライ失敗 - セッション情報は保持して中断
+                        throw new Error(`チャンク ${i + 1} のアップロードに失敗しました。後で再開できます。`);
+                    }
+                }
             }
-
-            const progress = Math.round(((i + 1) / totalChunks) * 100);
-            setProgress(progress);
         }
 
         // 完了
@@ -543,6 +607,9 @@ async function uploadFileInChunks(file) {
             throw new Error('チャンクアップロードの完了に失敗しました');
         }
 
+        // 成功したらlocalStorageをクリア
+        localStorage.removeItem(storageKey);
+
         addActivityLog('upload', `${file.name} のアップロードが完了しました`);
         if (window.toast) toast.success(`${file.name} のアップロードが完了しました`);
         await loadFiles(state.selectedDirectory);
@@ -551,6 +618,7 @@ async function uploadFileInChunks(file) {
         console.error('チャンクアップロードエラー:', error);
         addActivityLog('error', error.message);
         if (window.toast) toast.error(error.message);
+        // エラー時もセッション情報は保持（レジューム可能にする）
     } finally {
         setTimeout(() => showProgress(false), 500);
     }
