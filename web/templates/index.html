@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' }"
+<html lang="ja" x-data="{ darkMode: localStorage.getItem('darkMode') !== null ? localStorage.getItem('darkMode') === 'true' : window.matchMedia('(prefers-color-scheme: dark)').matches }"
       :class="{ 'dark': darkMode }" x-cloak>
 <head>
     <meta charset="UTF-8">
