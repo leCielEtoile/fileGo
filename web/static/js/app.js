@@ -714,6 +714,8 @@ function connectSSE() {
         statusEl.className = 'sse-status connected';
         addActivityLog('system', 'リアルタイム更新に接続しました');
         if (window.toast) toast.info('リアルタイム更新に接続しました', 3000);
+        // 接続成功したら再接続カウンターをリセット
+        state.sseReconnectCount = 0;
     };
 
     eventSource.onerror = () => {
@@ -722,12 +724,16 @@ function connectSSE() {
         addActivityLog('error', 'リアルタイム更新が切断されました');
         if (window.toast) toast.warning('リアルタイム更新が切断されました', 3000);
 
-        // 再接続
+        // 指数バックオフで再接続（最大30秒）
+        state.sseReconnectCount = (state.sseReconnectCount || 0) + 1;
+        const delay = Math.min(1000 * Math.pow(2, state.sseReconnectCount), 30000);
+
         setTimeout(() => {
             if (state.user) {
+                console.log(`SSE再接続試行 (${state.sseReconnectCount}回目, ${delay}ms待機)`);
                 connectSSE();
             }
-        }, 5000);
+        }, delay);
     };
 
     // ファイルアップロードイベント

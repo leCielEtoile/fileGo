@@ -37,6 +37,8 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// Cloudflare対策: X-Accel-Buffering を無効化してバッファリングを防ぐ
+	w.Header().Set("X-Accel-Buffering", "no")
 
 	// クライアントチャンネル作成
 	clientChan := make(chan SSEEvent, 10)
@@ -58,8 +60,9 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	// コンテキストのキャンセルを監視
 	ctx := r.Context()
 
-	// ハートビート（30秒ごと）
-	ticker := time.NewTicker(30 * time.Second)
+	// ハートビート（15秒ごと - Cloudflareの100秒タイムアウト対策）
+	// Cloudflareは100秒で接続を切断するため、それより短い間隔で送信
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
 	// クライアントにイベントを送信
