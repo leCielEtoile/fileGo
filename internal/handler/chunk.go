@@ -30,7 +30,17 @@ func NewChunkHandler(um *storage.UploadManager, pc *permission.Checker) *ChunkHa
 
 // InitChunkUpload チャンクアップロードの初期化
 func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
-	user := r.Context().Value(models.UserContextKey).(*models.User)
+	userVal := r.Context().Value(models.UserContextKey)
+	if userVal == nil {
+		http.Error(w, "認証情報が見つかりません", http.StatusUnauthorized)
+		return
+	}
+
+	user, ok := userVal.(*models.User)
+	if !ok {
+		http.Error(w, "認証情報の形式が不正です", http.StatusInternalServerError)
+		return
+	}
 
 	var req struct {
 		Filename  string `json:"filename"`
