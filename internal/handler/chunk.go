@@ -17,12 +17,14 @@ import (
 )
 
 type ChunkHandler struct {
+	storageManager    *storage.Manager
 	uploadManager     *storage.UploadManager
 	permissionChecker *permission.Checker
 }
 
-func NewChunkHandler(um *storage.UploadManager, pc *permission.Checker) *ChunkHandler {
+func NewChunkHandler(sm *storage.Manager, um *storage.UploadManager, pc *permission.Checker) *ChunkHandler {
 	return &ChunkHandler{
+		storageManager:    sm,
 		uploadManager:     um,
 		permissionChecker: pc,
 	}
@@ -77,6 +79,15 @@ func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
 	if !hasPermission {
 		http.Error(w, "書き込み権限がありません", http.StatusForbidden)
 		return
+	}
+
+	// userディレクトリの場合、ユーザー個別ディレクトリを自動作成
+	if strings.HasPrefix(req.Directory, "user/") {
+		if err := h.storageManager.EnsureUserDirectory(user.DiscordID); err != nil {
+			slog.Error("ユーザーディレクトリ作成エラー", "error", err)
+			http.Error(w, "ユーザーディレクトリの作成に失敗しました", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// アップロードセッション初期化

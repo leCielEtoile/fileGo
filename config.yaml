@@ -18,7 +18,7 @@ database:
   max_connections: 10
 
 storage:
-  upload_path: "/root/data/uploads"
+  upload_path: "/root/data"
   max_file_size: 104857600  # 100MB
   chunk_upload_enabled: true
   chunk_size: 20971520  # 20MB
@@ -26,16 +26,15 @@ storage:
   max_concurrent_uploads: 3
   upload_session_ttl: 48h
   cleanup_interval: 1h
+  admin_role_id: "123456789012345678"  # 管理者ロールID
   directories:
+    - path: "user"
+      required_roles: []
+      permissions: ["read", "write", "delete"]
+      type: "user_private"  # ユーザー個別ディレクトリ
+    - path: "public"
+      required_roles: []
+      permissions: ["read", "write"]
     - path: "admin"
       required_roles: ["123456789012345678"]
       permissions: ["read", "write", "delete"]
-    - path: "staff"
-      required_roles: ["234567890123456789"]
-      permissions: ["read", "write"]
-    - path: "members"
-      required_roles: ["345678901234567890"]
-      permissions: ["read", "write"]
-    - path: "public"
-      required_roles: []
-      permissions: ["read"]

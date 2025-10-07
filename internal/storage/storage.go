@@ -39,6 +39,8 @@ func (m *Manager) InitializeDirectories() error {
 
 	// 設定ファイルで定義された各ディレクトリを作成
 	for _, dir := range m.config.Storage.Directories {
+		// user_private タイプの場合は親ディレクトリのみ作成
+		// ユーザー個別ディレクトリは初回アクセス時に作成
 		dirPath := filepath.Join(m.config.Storage.UploadPath, dir.Path)
 		if err := os.MkdirAll(dirPath, 0755); err != nil {
 			return fmt.Errorf("ディレクトリ '%s' の作成に失敗しました: %w", dir.Path, err)
@@ -46,6 +48,15 @@ func (m *Manager) InitializeDirectories() error {
 		slog.Info("ディレクトリを作成しました", "path", dirPath)
 	}
 
+	return nil
+}
+
+// EnsureUserDirectory ユーザー個別ディレクトリを作成（存在しない場合）
+func (m *Manager) EnsureUserDirectory(userID string) error {
+	userDir := filepath.Join(m.config.Storage.UploadPath, "user", userID)
+	if err := os.MkdirAll(userDir, 0755); err != nil {
+		return fmt.Errorf("ユーザーディレクトリの作成に失敗しました: %w", err)
+	}
 	return nil
 }
 

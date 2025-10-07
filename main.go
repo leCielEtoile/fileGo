@@ -64,7 +64,7 @@ func main() {
 	// ハンドラー初期化
 	authHandler := handler.NewAuthHandler(cfg, db)
 	fileHandler := handler.NewFileHandler(cfg, storageManager, uploadManager, permissionChecker)
-	chunkHandler := handler.NewChunkHandler(uploadManager, permissionChecker)
+	chunkHandler := handler.NewChunkHandler(storageManager, uploadManager, permissionChecker)
 
 	// SSEハンドラーをファイルハンドラーに注入
 	fileHandler.SetSSEHandler(sseHandler)
