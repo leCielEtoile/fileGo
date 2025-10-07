@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
@@ -83,7 +84,21 @@ func main() {
 
 	// ルートパス（Webインターフェース）
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/templates/index.html")
+		tmpl, err := template.ParseFiles("web/templates/index.html")
+		if err != nil {
+			slog.Error("テンプレートの読み込みに失敗しました", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		data := map[string]interface{}{
+			"ServiceName": cfg.Server.ServiceName,
+		}
+
+		if err := tmpl.Execute(w, data); err != nil {
+			slog.Error("テンプレートのレンダリングに失敗しました", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
 	})
 
 	// ヘルスチェック

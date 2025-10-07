@@ -1,5 +1,6 @@
 server:
   port: "8080"
+  service_name: "Discord File Server"
   behind_proxy: true
   trusted_proxies:
     - "172.16.0.0/12"
