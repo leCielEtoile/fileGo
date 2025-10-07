@@ -20,7 +20,8 @@ type Config struct {
 
 // ServerConfig サーバー設定
 type ServerConfig struct {
-	Port           string   `yaml:"port"`            // 16 bytes
+	Port        string   `yaml:"port"`         // 16 bytes
+	ServiceName string   `yaml:"service_name"` // 16 bytes
 	TrustedProxies []string `yaml:"trusted_proxies"` // 24 bytes
 	BehindProxy    bool     `yaml:"behind_proxy"`    // 1 byte
 	SecureCookie   bool     `yaml:"secure_cookie"`   // 1 byte (HTTPS環境でのみtrue)
@@ -86,6 +87,9 @@ func overrideFromEnv(cfg *Config) {
 	// Server設定
 	if port := os.Getenv("SERVER_PORT"); port != "" {
 		cfg.Server.Port = port
+	}
+	if serviceName := os.Getenv("SERVER_SERVICE_NAME"); serviceName != "" {
+		cfg.Server.ServiceName = serviceName
 	}
 	if behindProxy := os.Getenv("SERVER_BEHIND_PROXY"); behindProxy != "" {
 		cfg.Server.BehindProxy = behindProxy == "true"
