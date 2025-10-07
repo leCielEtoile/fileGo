@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -128,7 +129,7 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Hand
 			`, cookie.Value).Scan(&session.SessionToken, &session.UserID, &session.ExpiresAt)
 
 			if err != nil {
-				if err == sql.ErrNoRows {
+				if errors.Is(err, sql.ErrNoRows) {
 					slog.Debug("無効または期限切れセッション", "token_prefix", cookie.Value[:10]+"...")
 					http.Error(w, "invalid session", http.StatusUnauthorized)
 					return
@@ -156,7 +157,7 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Hand
 			)
 
 			if err != nil {
-				if err == sql.ErrNoRows {
+				if errors.Is(err, sql.ErrNoRows) {
 					slog.Warn("ユーザー情報が見つかりません", "user_id", session.UserID)
 					http.Error(w, "user not found", http.StatusUnauthorized)
 					return

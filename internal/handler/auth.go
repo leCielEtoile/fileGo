@@ -190,7 +190,17 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
-	user := r.Context().Value(models.UserContextKey).(*models.User)
+	userVal := r.Context().Value(models.UserContextKey)
+	if userVal == nil {
+		http.Error(w, "認証情報が見つかりません", http.StatusUnauthorized)
+		return
+	}
+
+	user, ok := userVal.(*models.User)
+	if !ok {
+		http.Error(w, "認証情報の形式が不正です", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(user); err != nil {
