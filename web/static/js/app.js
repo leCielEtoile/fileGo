@@ -8,7 +8,8 @@ const state = {
     eventSource: null,
     viewMode: 'list', // 'list' or 'grid'
     sortBy: 'name-asc',
-    searchQuery: ''
+    searchQuery: '',
+    eventListenersInitialized: false
 };
 
 // ページ読み込み時
@@ -329,6 +330,13 @@ function renderFiles() {
 
 // イベントリスナー設定
 function setupEventListeners() {
+    if (state.eventListenersInitialized) {
+        console.log('イベントリスナーは既に初期化済みです');
+        return;
+    }
+
+    console.log('イベントリスナーを初期化します...');
+
     // ドラッグ&ドロップ
     setupDragAndDrop();
 
@@ -350,6 +358,9 @@ function setupEventListeners() {
         });
     }
 
+    state.eventListenersInitialized = true;
+    console.log('イベントリスナーの初期化が完了しました');
+
     // ビュー切り替え (Alpine.jsが管理)
     // Alpine.jsのx-dataでviewModeを管理しているため、ここでは不要
 }
@@ -365,8 +376,10 @@ function setupDragAndDrop() {
     const dropOverlay = document.getElementById('drop-overlay');
     const fileInput = document.getElementById('file-input');
 
+    console.log('setupDragAndDrop: dropOverlay=', dropOverlay, 'fileInput=', fileInput);
+
     if (!dropOverlay || !fileInput) {
-        console.error('Drop overlay or file input not found');
+        console.error('Drop overlay or file input not found', { dropOverlay, fileInput });
         return;
     }
 
@@ -403,6 +416,7 @@ function setupDragAndDrop() {
         dragCounter = 0;
         dropOverlay.classList.add('hidden');
         const files = Array.from(e.dataTransfer.files);
+        console.log('ファイルがドロップされました:', files);
         if (files.length > 0) {
             handleDroppedFiles(files);
         }
@@ -410,11 +424,14 @@ function setupDragAndDrop() {
 
     // ファイル選択時
     fileInput.addEventListener('change', (e) => {
+        console.log('ファイルが選択されました:', fileInput.files);
         if (fileInput.files.length > 0) {
             handleDroppedFiles(Array.from(fileInput.files));
             fileInput.value = ''; // リセット
         }
     });
+
+    console.log('ドラッグ&ドロップのイベントリスナーを設定しました');
 }
 
 // ドロップされたファイルの処理
