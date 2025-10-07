@@ -78,56 +78,129 @@
                 </div>
             </div>
 
-            <!-- ログイン後 -->
-            <div id="app-section" class="hidden space-y-8">
-                <!-- ディレクトリ選択 -->
-                <section>
-                    <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-4">ディレクトリ</h2>
-                    <div id="directory-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
-                </section>
+            <!-- ログイン後 - Box風レイアウト -->
+            <div id="app-section" class="hidden flex h-screen" x-data="{ sidebarOpen: true, viewMode: 'list' }">
+                <!-- サイドバー -->
+                <aside :class="sidebarOpen ? 'w-64' : 'w-0'" class="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 overflow-hidden flex-shrink-0">
+                    <div class="h-full flex flex-col">
+                        <!-- サイドバーヘッダー -->
+                        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                            <h2 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                                <svg class="w-5 h-5 text-discord-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                                </svg>
+                                フォルダ
+                            </h2>
+                        </div>
 
-                <!-- ファイルアップロード -->
-                <section>
-                    <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-4">ファイルアップロード</h2>
-                    <div id="upload-drop-zone" class="bg-white dark:bg-gray-700 rounded-xl border-3 border-dashed border-gray-300 dark:border-gray-600 p-8 text-center transition-all hover:border-discord-500 hover:bg-discord-50 dark:hover:bg-discord-900/10 cursor-pointer">
-                        <input type="file" id="file-input" class="hidden" multiple>
-                        <svg class="w-16 h-16 mx-auto mb-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                        </svg>
-                        <p class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-2">ファイルをドラッグ&ドロップ</p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">または</p>
-                        <button type="button" onclick="document.getElementById('file-input').click()" class="px-6 py-3 bg-discord-500 hover:bg-discord-600 text-white font-semibold rounded-lg transition-all transform hover:scale-105">
-                            ファイルを選択
-                        </button>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-4">100MB以下は通常アップロード、それ以上は自動でチャンクアップロード</p>
+                        <!-- ディレクトリリスト -->
+                        <div id="directory-list" class="flex-1 overflow-y-auto p-2"></div>
+                    </div>
+                </aside>
+
+                <!-- メインコンテンツ -->
+                <main class="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
+                    <!-- ツールバー -->
+                    <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
+                        <div class="flex items-center justify-between gap-4">
+                            <!-- 左側: サイドバートグル + パンくず -->
+                            <div class="flex items-center gap-4">
+                                <button @click="sidebarOpen = !sidebarOpen" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                                    <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                                    </svg>
+                                </button>
+
+                                <!-- パンくずリスト -->
+                                <nav id="breadcrumb" class="flex items-center text-sm">
+                                    <span class="text-gray-500 dark:text-gray-400">フォルダを選択してください</span>
+                                </nav>
+                            </div>
+
+                            <!-- 右側: 検索 + アクション -->
+                            <div class="flex items-center gap-3">
+                                <!-- 検索 -->
+                                <div class="relative">
+                                    <input type="text" id="search-input" placeholder="ファイルを検索..."
+                                           class="w-64 pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-discord-500">
+                                    <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                    </svg>
+                                </div>
+
+                                <!-- ビュー切り替え -->
+                                <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                                    <button @click="viewMode = 'list'; window.switchViewMode('list')" :class="viewMode === 'list' ? 'bg-white dark:bg-gray-600 shadow' : ''" class="p-2 rounded transition-all">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                                        </svg>
+                                    </button>
+                                    <button @click="viewMode = 'grid'; window.switchViewMode('grid')" :class="viewMode === 'grid' ? 'bg-white dark:bg-gray-600 shadow' : ''" class="p-2 rounded transition-all">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <!-- 並べ替え -->
+                                <select id="sort-select" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-discord-500">
+                                    <option value="name-asc">名前 (A-Z)</option>
+                                    <option value="name-desc">名前 (Z-A)</option>
+                                    <option value="size-asc">サイズ (小→大)</option>
+                                    <option value="size-desc">サイズ (大→小)</option>
+                                    <option value="date-desc">更新日時 (新→古)</option>
+                                    <option value="date-asc">更新日時 (古→新)</option>
+                                </select>
+
+                                <!-- アップロードボタン -->
+                                <button onclick="document.getElementById('file-input').click()" class="px-4 py-2 bg-discord-500 hover:bg-discord-600 text-white font-semibold rounded-lg transition-all flex items-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                    </svg>
+                                    アップロード
+                                </button>
+                                <input type="file" id="file-input" class="hidden" multiple>
+                            </div>
+                        </div>
+
+                        <!-- プログレスバー -->
+                        <div id="upload-progress" class="hidden mt-3">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-xs font-semibold text-gray-700 dark:text-gray-200">アップロード中...</span>
+                                <span id="progress-text" class="text-xs font-bold text-discord-500">0%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 overflow-hidden">
+                                <div id="progress-fill" class="bg-gradient-to-r from-discord-500 to-discord-600 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- プログレスバー -->
-                    <div id="upload-progress" class="hidden mt-4 bg-white dark:bg-gray-700 rounded-xl p-4 shadow-lg">
+                    <!-- ファイル一覧エリア -->
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div id="files-list"></div>
+
+                        <!-- 全画面D&Dオーバーレイ -->
+                        <div id="drop-overlay" class="hidden fixed inset-0 bg-discord-500/20 backdrop-blur-sm z-40 flex items-center justify-center">
+                            <div class="bg-white dark:bg-gray-800 rounded-2xl p-12 border-4 border-dashed border-discord-500 shadow-2xl">
+                                <svg class="w-24 h-24 mx-auto mb-4 text-discord-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                </svg>
+                                <p class="text-2xl font-bold text-gray-800 dark:text-white">ファイルをドロップ</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- アクティビティログ (フッター) -->
+                    <div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-sm font-semibold text-gray-700 dark:text-gray-200">アップロード中...</span>
-                            <span id="progress-text" class="text-sm font-bold text-discord-500">0%</span>
+                            <h3 class="text-sm font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                                アクティビティ
+                                <span class="sse-status text-xs" id="sse-status"></span>
+                            </h3>
                         </div>
-                        <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3 overflow-hidden">
-                            <div id="progress-fill" class="bg-gradient-to-r from-discord-500 to-discord-600 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
-                        </div>
+                        <div id="activity-log" class="bg-gray-900 dark:bg-black rounded-lg p-3 max-h-32 overflow-y-auto font-mono text-xs"></div>
                     </div>
-                </section>
-
-                <!-- ファイル一覧 -->
-                <section>
-                    <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-4">ファイル一覧</h2>
-                    <div id="files-list" class="space-y-3"></div>
-                </section>
-
-                <!-- アクティビティログ (SSE) -->
-                <section>
-                    <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-3">
-                        アクティビティログ
-                        <span class="sse-status text-sm" id="sse-status"></span>
-                    </h2>
-                    <div id="activity-log" class="bg-gray-900 dark:bg-black rounded-xl p-4 max-h-80 overflow-y-auto font-mono text-sm"></div>
-                </section>
+                </main>
             </div>
         </main>
     </div>
