@@ -14,7 +14,7 @@ services:
       # 設定ファイルとデータベース（自動生成）
       - ./config:/root/config:rw
       # アップロードファイル保存先
-      - ./data/uploads:/root/data/uploads:rw
+      - ./data:/root/data:rw
       # ログファイル
       - ./logs:/root/logs:rw
 

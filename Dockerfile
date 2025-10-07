@@ -38,7 +38,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # ディレクトリ作成
-RUN mkdir -p /root/config /root/data/uploads /root/logs
+RUN mkdir -p /root/config /root/data /root/logs
 
 # ポート公開
 EXPOSE 8080
