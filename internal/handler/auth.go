@@ -1,3 +1,4 @@
+// Package handler provides HTTP handlers for authentication, file operations, and SSE.
 package handler
 
 import (
@@ -17,6 +18,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// AuthHandler handles authentication-related HTTP requests.
 type AuthHandler struct {
 	config      *config.Config
 	db          *sql.DB
@@ -24,6 +26,7 @@ type AuthHandler struct {
 	sseHandler  *SSEHandler
 }
 
+// NewAuthHandler creates a new AuthHandler instance.
 func NewAuthHandler(cfg *config.Config, db *sql.DB) *AuthHandler {
 	oauthConfig := &oauth2.Config{
 		ClientID:     cfg.Discord.ClientID,
@@ -43,10 +46,12 @@ func NewAuthHandler(cfg *config.Config, db *sql.DB) *AuthHandler {
 	}
 }
 
+// SetSSEHandler sets the SSE handler for broadcasting events.
 func (h *AuthHandler) SetSSEHandler(sse *SSEHandler) {
 	h.sseHandler = sse
 }
 
+// Login handles the OAuth2 login initiation.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	state := generateRandomString(32)
 
@@ -65,6 +70,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
+// Callback handles the OAuth2 callback from Discord.
 func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// state検証
 	stateCookie, err := r.Cookie("oauth_state")
@@ -131,7 +137,8 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		refreshToken = token.RefreshToken
 	}
 
-	_, err = h.db.Exec(`
+	ctx := context.Background()
+	_, err = h.db.ExecContext(ctx, `
 		INSERT INTO sessions (session_token, user_id, discord_access_token, discord_refresh_token, expires_at)
 		VALUES (?, ?, ?, ?, ?)
 	`, sessionToken, discordUser.ID, token.AccessToken, refreshToken, expiresAt)
@@ -166,11 +173,13 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+// Logout handles user logout by invalidating the session.
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_token")
 	if err == nil {
 		// セッション削除
-		if _, err := h.db.Exec("DELETE FROM sessions WHERE session_token = ?", cookie.Value); err != nil {
+		ctx := context.Background()
+		if _, err := h.db.ExecContext(ctx, "DELETE FROM sessions WHERE session_token = ?", cookie.Value); err != nil {
 			slog.Error("セッション削除に失敗しました", "error", err)
 		}
 	}
@@ -189,6 +198,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+// GetCurrentUser returns the currently authenticated user information.
 func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	userVal := r.Context().Value(models.UserContextKey)
 	if userVal == nil {
@@ -222,10 +232,12 @@ func (h *AuthHandler) getDiscordUser(accessToken string) (*models.DiscordUser, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Discord APIエラー: %d", resp.StatusCode)
+		return nil, fmt.Errorf("discord APIエラー: %d", resp.StatusCode)
 	}
 
 	var user models.DiscordUser
@@ -250,13 +262,16 @@ func (h *AuthHandler) checkGuildMembership(accessToken, _ string) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	return resp.StatusCode == http.StatusOK, nil
 }
 
 func (h *AuthHandler) upsertUser(discordUser *models.DiscordUser) error {
-	_, err := h.db.Exec(`
+	ctx := context.Background()
+	_, err := h.db.ExecContext(ctx, `
 		INSERT INTO users (discord_id, username, discriminator, avatar, last_login)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(discord_id) DO UPDATE SET

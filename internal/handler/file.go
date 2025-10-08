@@ -1,3 +1,5 @@
+// Package handler provides HTTP request handlers for the file server.
+// This file contains handlers for file operations including upload, download, delete, and listing.
 package handler
 
 import (
@@ -19,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// FileHandler handles HTTP requests for file operations.
 type FileHandler struct {
 	config            *config.Config
 	storageManager    *storage.Manager
@@ -27,6 +30,7 @@ type FileHandler struct {
 	sseHandler        *SSEHandler
 }
 
+// NewFileHandler creates a new file handler with the provided dependencies.
 func NewFileHandler(cfg *config.Config, sm *storage.Manager, um *storage.UploadManager, pc *permission.Checker) *FileHandler {
 	return &FileHandler{
 		config:            cfg,
@@ -36,11 +40,13 @@ func NewFileHandler(cfg *config.Config, sm *storage.Manager, um *storage.UploadM
 	}
 }
 
+// SetSSEHandler sets the SSE handler for broadcasting file events.
 func (h *FileHandler) SetSSEHandler(sse *SSEHandler) {
 	h.sseHandler = sse
 }
 
-// Upload 通常のファイルアップロード（最大100MB）
+// Upload handles regular file uploads up to the configured maximum file size.
+// It validates permissions, saves the file, and broadcasts an upload event via SSE.
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	userVal := r.Context().Value(models.UserContextKey)
 	if userVal == nil {
@@ -95,7 +101,11 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ファイルの取得に失敗しました", http.StatusBadRequest)
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Error("ファイルのクローズに失敗しました", "error", err)
+		}
+	}()
 
 	// ファイルサイズチェック（100MB制限）
 	if header.Size > h.config.Storage.MaxFileSize {
@@ -129,7 +139,8 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ListFiles ファイル一覧取得
+// ListFiles returns a list of files in the specified directory.
+// It validates user permissions before listing files.
 func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {
@@ -181,7 +192,8 @@ func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Download ファイルダウンロード（Range Request対応）
+// Download handles file downloads with support for HTTP Range requests.
+// This enables resumable downloads and partial content delivery.
 func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {
@@ -233,7 +245,11 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ファイルのオープンに失敗しました", http.StatusInternalServerError)
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Error("ファイルのクローズに失敗しました", "error", err)
+		}
+	}()
 
 	// Range Requestのサポート
 	w.Header().Set("Accept-Ranges", "bytes")
@@ -277,7 +293,8 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// DeleteFile ファイル削除
+// DeleteFile removes a file from the specified directory.
+// It validates delete permissions before removing the file.
 func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {
@@ -330,7 +347,8 @@ func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ListDirectories ユーザーがアクセス可能なディレクトリ一覧を取得
+// ListDirectories returns all directories the authenticated user can access.
+// It includes permission information for each directory.
 func (h *FileHandler) ListDirectories(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {

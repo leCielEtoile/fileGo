@@ -1,0 +1,92 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - revive
+    - gosec
+    - bodyclose
+    - noctx
+    - sqlclosecheck
+    - errorlint
+    - unparam
+    - wastedassign
+
+  disable:
+    - godot
+    - misspell
+    - unconvert
+    - gosimple
+    - predeclared
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable-all: true
+
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+      - name: var-naming
+        disabled: false
+      - name: package-comments
+        disabled: false
+      - name: error-return
+        disabled: false
+      - name: error-naming
+        disabled: false
+      - name: if-return
+        disabled: false
+      - name: var-declaration
+        disabled: false
+      - name: unexported-return
+        disabled: false
+
+  gosec:
+    excludes:
+      - G404
+    config:
+      G101:
+        pattern: "(?i)passwd|password|token|secret"
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - unparam
+
+    - path: internal/models/
+      linters:
+        - revive
+
+    - path: main\.go
+      linters:
+        - revive
+      text: "package-comments"
+
+  exclude-dirs:
+    - vendor
+    - .github
+
+  max-same-issues: 0
+  max-issues-per-linter: 0
+
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true

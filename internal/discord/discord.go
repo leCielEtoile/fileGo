@@ -1,3 +1,4 @@
+// Package discord provides Discord API client functionality for role-based access control.
 package discord
 
 import (
@@ -86,9 +87,11 @@ func (c *Client) GetMemberRoles(userID string) ([]string, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Discord API呼び出しエラー: %w", err)
+		return nil, fmt.Errorf("discord API呼び出しエラー: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -102,20 +105,20 @@ func (c *Client) GetMemberRoles(userID string) ([]string, error) {
 	case http.StatusNotFound:
 		return nil, fmt.Errorf("ユーザーがギルドに存在しません (user_id: %s)", userID)
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return nil, fmt.Errorf("Discord Bot認証エラー (status: %d)", resp.StatusCode)
+		return nil, fmt.Errorf("discord Bot認証エラー (status: %d)", resp.StatusCode)
 	case http.StatusTooManyRequests:
 		// レート制限
 		var errResp ErrorResponse
 		if err := json.Unmarshal(body, &errResp); err == nil {
-			return nil, fmt.Errorf("Discord APIレート制限: %s", errResp.Message)
+			return nil, fmt.Errorf("discord APIレート制限: %s", errResp.Message)
 		}
-		return nil, fmt.Errorf("Discord APIレート制限 (status: 429)")
+		return nil, fmt.Errorf("discord APIレート制限 (status: 429)")
 	default:
 		var errResp ErrorResponse
 		if err := json.Unmarshal(body, &errResp); err == nil {
-			return nil, fmt.Errorf("Discord APIエラー (code: %d, message: %s)", errResp.Code, errResp.Message)
+			return nil, fmt.Errorf("discord APIエラー (code: %d, message: %s)", errResp.Code, errResp.Message)
 		}
-		return nil, fmt.Errorf("Discord APIエラー (status: %d)", resp.StatusCode)
+		return nil, fmt.Errorf("discord APIエラー (status: %d)", resp.StatusCode)
 	}
 
 	// JSON解析

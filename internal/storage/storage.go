@@ -1,3 +1,5 @@
+// Package storage provides file storage management functionality.
+// It handles file uploads, downloads, directory management, and file metadata.
 package storage
 
 import (
@@ -14,26 +16,30 @@ import (
 	"github.com/google/uuid"
 )
 
+// Manager handles file storage operations including directory creation and file management.
 type Manager struct {
 	config *config.Config
 }
 
+// SavedFile represents a successfully saved file with its metadata.
 type SavedFile struct {
 	Filename string
 	Path     string
 	Size     int64
 }
 
+// NewManager creates a new storage manager instance with the provided configuration.
 func NewManager(cfg *config.Config) *Manager {
 	return &Manager{
 		config: cfg,
 	}
 }
 
-// InitializeDirectories は設定ファイルで定義されたディレクトリを作成
+// InitializeDirectories creates all directories defined in the configuration file.
+// It creates the root upload directory and all configured subdirectories with secure permissions.
 func (m *Manager) InitializeDirectories() error {
 	// アップロードルートディレクトリ作成
-	if err := os.MkdirAll(m.config.Storage.UploadPath, 0755); err != nil {
+	if err := os.MkdirAll(m.config.Storage.UploadPath, 0750); err != nil {
 		return fmt.Errorf("アップロードディレクトリの作成に失敗しました: %w", err)
 	}
 
@@ -42,7 +48,7 @@ func (m *Manager) InitializeDirectories() error {
 		// user_private タイプの場合は親ディレクトリのみ作成
 		// ユーザー個別ディレクトリは初回アクセス時に作成
 		dirPath := filepath.Join(m.config.Storage.UploadPath, dir.Path)
-		if err := os.MkdirAll(dirPath, 0755); err != nil {
+		if err := os.MkdirAll(dirPath, 0750); err != nil {
 			return fmt.Errorf("ディレクトリ '%s' の作成に失敗しました: %w", dir.Path, err)
 		}
 		slog.Info("ディレクトリを作成しました", "path", dirPath)
@@ -51,16 +57,18 @@ func (m *Manager) InitializeDirectories() error {
 	return nil
 }
 
-// EnsureUserDirectory ユーザー個別ディレクトリを作成（存在しない場合）
+// EnsureUserDirectory creates a user-specific directory if it doesn't exist.
+// This is called on-demand when a user first uploads to their personal directory.
 func (m *Manager) EnsureUserDirectory(userID string) error {
 	userDir := filepath.Join(m.config.Storage.UploadPath, "user", userID)
-	if err := os.MkdirAll(userDir, 0755); err != nil {
+	if err := os.MkdirAll(userDir, 0750); err != nil {
 		return fmt.Errorf("ユーザーディレクトリの作成に失敗しました: %w", err)
 	}
 	return nil
 }
 
-// SaveFile 通常ファイル保存
+// SaveFile saves a file to the specified directory with a unique UUID-based filename.
+// It returns metadata about the saved file including the generated filename, path, and size.
 func (m *Manager) SaveFile(file io.Reader, filename, directory string) (*SavedFile, error) {
 	// ファイル名生成（UUID + 元のファイル名）
 	fileID := uuid.New().String()
@@ -74,12 +82,18 @@ func (m *Manager) SaveFile(file io.Reader, filename, directory string) (*SavedFi
 	if err != nil {
 		return nil, fmt.Errorf("ファイル作成エラー: %w", err)
 	}
-	defer destFile.Close()
+	defer func() {
+		if err := destFile.Close(); err != nil {
+			slog.Error("ファイルのクローズに失敗しました", "error", err)
+		}
+	}()
 
 	// データコピー
 	written, err := io.Copy(destFile, file)
 	if err != nil {
-		os.Remove(destPath)
+		if removeErr := os.Remove(destPath); removeErr != nil {
+			slog.Error("一時ファイルの削除に失敗しました", "error", removeErr)
+		}
 		return nil, fmt.Errorf("ファイル書き込みエラー: %w", err)
 	}
 
@@ -90,7 +104,8 @@ func (m *Manager) SaveFile(file io.Reader, filename, directory string) (*SavedFi
 	}, nil
 }
 
-// ListFiles ディレクトリ内のファイル一覧取得
+// ListFiles returns a list of all files in the specified directory.
+// It excludes temporary files (.temp) and metadata files (.meta) from the listing.
 func (m *Manager) ListFiles(directory string) ([]models.FileInfo, error) {
 	dirPath := filepath.Join(m.config.Storage.UploadPath, directory)
 
@@ -129,7 +144,7 @@ func (m *Manager) ListFiles(directory string) ([]models.FileInfo, error) {
 	return files, nil
 }
 
-// DeleteFile ファイル削除
+// DeleteFile removes a file from the specified directory.
 func (m *Manager) DeleteFile(directory, filename string) error {
 	filePath := filepath.Join(m.config.Storage.UploadPath, directory, filename)
 	return os.Remove(filePath)

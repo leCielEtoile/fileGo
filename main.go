@@ -41,7 +41,11 @@ func main() {
 		slog.Error("データベースの初期化に失敗しました", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			slog.Error("データベースのクローズに失敗しました", "error", err)
+		}
+	}()
 
 	// ストレージ初期化（ディレクトリ作成）
 	storageManager := storage.NewManager(cfg)
