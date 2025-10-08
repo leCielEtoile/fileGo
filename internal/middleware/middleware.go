@@ -121,7 +121,7 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Hand
 
 			// Validate session
 			var session models.Session
-			err = db.QueryRow(`
+			err = db.QueryRowContext(r.Context(), `
 				SELECT session_token, user_id, expires_at
 				FROM sessions
 				WHERE session_token = ? AND expires_at > CURRENT_TIMESTAMP
@@ -142,7 +142,7 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Hand
 
 			// Get user information
 			var user models.User
-			err = db.QueryRow(`
+			err = db.QueryRowContext(r.Context(), `
 				SELECT discord_id, username, discriminator, avatar, created_at, last_login
 				FROM users
 				WHERE discord_id = ?

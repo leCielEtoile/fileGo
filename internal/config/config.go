@@ -66,6 +66,7 @@ type DirectoryConfig struct {
 
 // Load 設定ファイルを読み込み、環境変数で上書きする
 func Load(path string) (*Config, error) {
+	// #nosec G304 - Configuration file path is intentionally provided by the application
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("設定ファイルの読み込みに失敗しました: %w", err)

@@ -1,25 +1,29 @@
+// Package database provides database initialization and management functionality.
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
 	_ "modernc.org/sqlite"
 )
 
+// Initialize initializes the database connection and creates tables if they don't exist.
 func Initialize(dbPath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("データベースオープンエラー: %w", err)
 	}
 
-	if err := db.Ping(); err != nil {
+	ctx := context.Background()
+	if err := db.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("データベース接続エラー: %w", err)
 	}
 
 	// テーブル作成
 	if err := createTables(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("テーブル作成エラー: %w", err)
 	}
 
@@ -69,6 +73,7 @@ func createTables(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action);
 	`
 
-	_, err := db.Exec(schema)
+	ctx := context.Background()
+	_, err := db.ExecContext(ctx, schema)
 	return err
 }

@@ -52,7 +52,10 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	slog.Info("SSE client connected", "total_clients", clientCount)
 
 	// 接続確立メッセージ
-	fmt.Fprintf(w, "data: {\"message\": \"connected\"}\n\n")
+	if _, err := fmt.Fprintf(w, "data: {\"message\": \"connected\"}\n\n"); err != nil {
+		slog.Error("SSE write error", "error", err)
+		return
+	}
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
@@ -86,14 +89,20 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, jsonData)
+			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, jsonData); err != nil {
+				slog.Error("SSE write error", "error", err)
+				return
+			}
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
 
 		case <-ticker.C:
 			// ハートビート送信
-			fmt.Fprintf(w, ": heartbeat\n\n")
+			if _, err := fmt.Fprintf(w, ": heartbeat\n\n"); err != nil {
+				slog.Error("SSE write error", "error", err)
+				return
+			}
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}

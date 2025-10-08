@@ -1,3 +1,5 @@
+// Package permission provides user permission checking functionality for file operations.
+// It integrates with Discord roles to determine user access to different directories.
 package permission
 
 import (
@@ -15,7 +17,8 @@ type Checker struct {
 	discordClient *discord.Client
 }
 
-// NewChecker 権限チェッカーを作成
+// NewChecker creates a new permission checker instance.
+// It requires a configuration and Discord client for role-based permission checks.
 func NewChecker(cfg *config.Config, dc *discord.Client) *Checker {
 	return &Checker{
 		config:        cfg,
@@ -23,10 +26,11 @@ func NewChecker(cfg *config.Config, dc *discord.Client) *Checker {
 	}
 }
 
-// CheckPermission 権限チェック
-// userID: DiscordユーザーID
-// directory: ディレクトリパス（例: "user", "user/123456789", "public", "admin"）
-// permission: 権限種別 ("read", "write", "delete")
+// CheckPermission verifies if a user has the specified permission for a directory.
+// userID: Discord user ID
+// directory: Directory path (e.g., "user", "user/123456789", "public", "admin")
+// permission: Permission type ("read", "write", "delete")
+// Returns true if the user has permission, false otherwise, or an error if the check fails.
 func (pc *Checker) CheckPermission(userID, directory, permission string) (bool, error) {
 	// ディレクトリパスを分解
 	pathParts := strings.Split(directory, "/")
@@ -126,7 +130,8 @@ func (pc *Checker) isAdmin(userID string) (bool, error) {
 	return false, nil
 }
 
-// GetAccessibleDirectories ユーザーがアクセス可能なディレクトリ一覧を取得
+// GetAccessibleDirectories returns a list of directories the user can access.
+// It checks user roles against directory requirements and handles special cases like user_private directories.
 func (pc *Checker) GetAccessibleDirectories(userID string) ([]config.DirectoryConfig, error) {
 	accessible := []config.DirectoryConfig{}
 
