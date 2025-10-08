@@ -1,5 +1,5 @@
-// Package permission provides user permission checking functionality for file operations.
-// It integrates with Discord roles to determine user access to different directories.
+// Package permission はファイル操作のためのユーザー権限チェック機能を提供します。
+// Discordのロールと統合して、異なるディレクトリへのユーザーアクセスを決定します。
 package permission
 
 import (
@@ -13,15 +13,15 @@ import (
 	"fileserver/internal/discord"
 )
 
-// Checker 権限チェッカー
+// Checker は権限チェッカーを表します。
 type Checker struct {
 	config        *config.Config
 	discordClient *discord.Client
 	db            *sql.DB
 }
 
-// NewChecker creates a new permission checker instance.
-// It requires a configuration and Discord client for role-based permission checks.
+// NewChecker は新しい権限チェッカーインスタンスを作成します。
+// ロールベースの権限チェックのために設定とDiscordクライアントが必要です。
 func NewChecker(cfg *config.Config, dc *discord.Client, db *sql.DB) *Checker {
 	return &Checker{
 		config:        cfg,
@@ -30,11 +30,11 @@ func NewChecker(cfg *config.Config, dc *discord.Client, db *sql.DB) *Checker {
 	}
 }
 
-// CheckPermission verifies if a user has the specified permission for a directory.
-// userID: Discord user ID
-// directory: Directory path (e.g., "user", "user/123456789", "public", "admin")
-// permission: Permission type ("read", "write", "delete")
-// Returns true if the user has permission, false otherwise, or an error if the check fails.
+// CheckPermission はユーザーがディレクトリに対して指定された権限を持っているかを検証します。
+// userID: Discord ユーザーID
+// directory: ディレクトリパス（例: "user", "user/123456789", "public", "admin"）
+// permission: 権限タイプ（"read", "write", "delete"）
+// ユーザーが権限を持っている場合はtrueを、そうでない場合はfalseを、チェックが失敗した場合はエラーを返します。
 func (pc *Checker) CheckPermission(userID, directory, permission string) (bool, error) {
 	// ディレクトリパスを分解
 	pathParts := strings.Split(directory, "/")
@@ -140,7 +140,7 @@ func (pc *Checker) isAdmin(userID string) (bool, error) {
 	return false, nil
 }
 
-// getUserDirectoryName gets the user's directory name (username) from database
+// getUserDirectoryName はデータベースからユーザーのディレクトリ名（ユーザー名）を取得します。
 func (pc *Checker) getUserDirectoryName(userID string) (string, error) {
 	var username string
 	err := pc.db.QueryRowContext(context.Background(),
@@ -151,8 +151,8 @@ func (pc *Checker) getUserDirectoryName(userID string) (string, error) {
 	return username, nil
 }
 
-// GetAccessibleDirectories returns a list of directories the user can access.
-// It checks user roles against directory requirements and handles special cases like user_private directories.
+// GetAccessibleDirectories はユーザーがアクセスできるディレクトリのリストを返します。
+// ユーザーのロールをディレクトリの要件と照合し、user_privateディレクトリなどの特殊なケースを処理します。
 func (pc *Checker) GetAccessibleDirectories(userID string) ([]config.DirectoryConfig, error) {
 	accessible := []config.DirectoryConfig{}
 

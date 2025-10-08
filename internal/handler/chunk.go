@@ -1,5 +1,5 @@
-// Package handler provides HTTP request handlers for the file server.
-// This file contains handlers for chunked file upload operations.
+// Package handler はファイルサーバーのHTTPリクエストハンドラーを提供します。
+// このファイルはチャンク分割されたファイルアップロード操作のハンドラーを含みます。
 package handler
 
 import (
@@ -18,14 +18,14 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// ChunkHandler handles HTTP requests for chunked file uploads.
+// ChunkHandler はチャンク分割されたファイルアップロードのHTTPリクエストを処理します。
 type ChunkHandler struct {
 	storageManager    *storage.Manager
 	uploadManager     *storage.UploadManager
 	permissionChecker *permission.Checker
 }
 
-// NewChunkHandler creates a new chunk upload handler.
+// NewChunkHandler は新しいチャンクアップロードハンドラーを作成します。
 func NewChunkHandler(sm *storage.Manager, um *storage.UploadManager, pc *permission.Checker) *ChunkHandler {
 	return &ChunkHandler{
 		storageManager:    sm,
@@ -34,8 +34,8 @@ func NewChunkHandler(sm *storage.Manager, um *storage.UploadManager, pc *permiss
 	}
 }
 
-// InitChunkUpload initializes a new chunked upload session.
-// It validates permissions, creates the upload session, and returns the upload ID.
+// InitChunkUpload は新しいチャンク分割アップロードセッションを初期化します。
+// 権限を検証し、アップロードセッションを作成し、アップロードIDを返します。
 func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
 	userVal := r.Context().Value(models.UserContextKey)
 	if userVal == nil {
@@ -125,7 +125,7 @@ func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// UploadChunk receives and saves a single chunk of data for an ongoing upload.
+// UploadChunk は進行中のアップロードのための単一のチャンクデータを受信して保存します。
 func (h *ChunkHandler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 	uploadID := chi.URLParam(r, "upload_id")
 	chunkIndexStr := r.URL.Query().Get("chunk_index")
@@ -161,7 +161,7 @@ func (h *ChunkHandler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GetChunkStatus returns the current status of a chunked upload including progress.
+// GetChunkStatus は進捗を含むチャンク分割アップロードの現在のステータスを返します。
 func (h *ChunkHandler) GetChunkStatus(w http.ResponseWriter, r *http.Request) {
 	uploadID := chi.URLParam(r, "upload_id")
 
@@ -188,7 +188,7 @@ func (h *ChunkHandler) GetChunkStatus(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// CompleteChunkUpload finalizes a chunked upload after all chunks are received.
+// CompleteChunkUpload はすべてのチャンクが受信された後、チャンク分割アップロードを完了します。
 func (h *ChunkHandler) CompleteChunkUpload(w http.ResponseWriter, r *http.Request) {
 	uploadID := chi.URLParam(r, "upload_id")
 
@@ -213,7 +213,7 @@ func (h *ChunkHandler) CompleteChunkUpload(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// CancelChunkUpload aborts an ongoing chunked upload and cleans up temporary files.
+// CancelChunkUpload は進行中のチャンク分割アップロードを中止し、一時ファイルをクリーンアップします。
 func (h *ChunkHandler) CancelChunkUpload(w http.ResponseWriter, r *http.Request) {
 	uploadID := chi.URLParam(r, "upload_id")
 

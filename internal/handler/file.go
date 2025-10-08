@@ -1,5 +1,5 @@
-// Package handler provides HTTP request handlers for the file server.
-// This file contains handlers for file operations including upload, download, delete, and listing.
+// Package handler はファイルサーバーのHTTPリクエストハンドラーを提供します。
+// このファイルはファイル操作（アップロード、ダウンロード、削除、一覧表示）のハンドラーを含みます。
 package handler
 
 import (
@@ -22,7 +22,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// FileHandler handles HTTP requests for file operations.
+// FileHandler はファイル操作のHTTPリクエストを処理します。
 type FileHandler struct {
 	config            *config.Config
 	storageManager    *storage.Manager
@@ -31,7 +31,7 @@ type FileHandler struct {
 	sseHandler        *SSEHandler
 }
 
-// NewFileHandler creates a new file handler with the provided dependencies.
+// NewFileHandler は指定された依存関係で新しいファイルハンドラーを作成します。
 func NewFileHandler(cfg *config.Config, sm *storage.Manager, um *storage.UploadManager, pc *permission.Checker) *FileHandler {
 	return &FileHandler{
 		config:            cfg,
@@ -41,13 +41,13 @@ func NewFileHandler(cfg *config.Config, sm *storage.Manager, um *storage.UploadM
 	}
 }
 
-// SetSSEHandler sets the SSE handler for broadcasting file events.
+// SetSSEHandler はファイルイベントをブロードキャストするためのSSEハンドラーを設定します。
 func (h *FileHandler) SetSSEHandler(sse *SSEHandler) {
 	h.sseHandler = sse
 }
 
-// Upload handles regular file uploads up to the configured maximum file size.
-// It validates permissions, saves the file, and broadcasts an upload event via SSE.
+// Upload は設定された最大ファイルサイズまでの通常のファイルアップロードを処理します。
+// 権限を検証し、ファイルを保存し、SSE経由でアップロードイベントをブロードキャストします。
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	userVal := r.Context().Value(models.UserContextKey)
 	if userVal == nil {
@@ -140,8 +140,8 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ListFiles returns a list of files in the specified directory.
-// It validates user permissions before listing files.
+// ListFiles は指定されたディレクトリ内のファイル一覧を返します。
+// ファイル一覧を取得する前にユーザー権限を検証します。
 func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {
@@ -193,8 +193,8 @@ func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Download handles file downloads with support for HTTP Range requests.
-// This enables resumable downloads and partial content delivery.
+// Download はHTTP Rangeリクエストをサポートしたファイルダウンロードを処理します。
+// これにより再開可能なダウンロードと部分的なコンテンツ配信が可能になります。
 func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {
@@ -308,8 +308,8 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// DeleteFile removes a file from the specified directory.
-// It validates delete permissions before removing the file.
+// DeleteFile は指定されたディレクトリからファイルを削除します。
+// ファイルを削除する前に削除権限を検証します。
 func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {
@@ -375,8 +375,8 @@ func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ListDirectories returns all directories the authenticated user can access.
-// It includes permission information for each directory.
+// ListDirectories は認証されたユーザーがアクセス可能なすべてのディレクトリを返します。
+// 各ディレクトリの権限情報を含みます。
 func (h *FileHandler) ListDirectories(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 	if !ok {

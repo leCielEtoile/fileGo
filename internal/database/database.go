@@ -1,4 +1,4 @@
-// Package database provides database initialization and management functionality.
+// Package database はデータベースの初期化と管理機能を提供します。
 package database
 
 import (
@@ -9,7 +9,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// Initialize initializes the database connection and creates tables if they don't exist.
+// Initialize はデータベース接続を初期化し、テーブルが存在しない場合は作成します。
 func Initialize(dbPath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {

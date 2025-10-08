@@ -11,7 +11,7 @@ type User struct {
 	Avatar        string    `json:"avatar"`
 }
 
-// GetDirectoryName returns the directory name for the user (username)
+// GetDirectoryName はユーザーのディレクトリ名（ユーザー名）を返します。
 func (u *User) GetDirectoryName() string {
 	return u.Username
 }

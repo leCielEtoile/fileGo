@@ -1,5 +1,5 @@
-// Package storage provides file storage management functionality.
-// This file contains the upload manager for handling chunked file uploads.
+// Package storage はファイルストレージ管理機能を提供します。
+// このファイルはチャンク分割されたファイルアップロードを処理するアップロードマネージャーを含みます。
 package storage
 
 import (
@@ -20,15 +20,15 @@ import (
 )
 
 var (
-	// ErrSessionNotFound is returned when an upload session cannot be found
+	// ErrSessionNotFound はアップロードセッションが見つからない場合に返されます
 	ErrSessionNotFound = errors.New("アップロードセッションが見つかりません")
-	// ErrMaxConcurrentUploads is returned when a user exceeds their concurrent upload limit
+	// ErrMaxConcurrentUploads はユーザーが同時アップロード制限を超えた場合に返されます
 	ErrMaxConcurrentUploads = errors.New("同時アップロード数の上限に達しています")
-	// ErrIncompleteUpload is returned when attempting to complete an upload with missing chunks
+	// ErrIncompleteUpload はチャンクが不足したままアップロードを完了しようとした場合に返されます
 	ErrIncompleteUpload = errors.New("アップロードが完了していません")
 )
 
-// UploadManager manages chunked file upload sessions with concurrent upload limits and cleanup.
+// UploadManager は同時アップロード制限とクリーンアップを備えたチャンク分割ファイルアップロードセッションを管理します。
 type UploadManager struct {
 	config      *config.Config
 	sessions    map[string]*models.UploadSession
@@ -36,7 +36,7 @@ type UploadManager struct {
 	mu          sync.RWMutex
 }
 
-// NewUploadManager creates a new upload manager and starts the cleanup routine.
+// NewUploadManager は新しいアップロードマネージャーを作成し、クリーンアップルーチンを開始します。
 func NewUploadManager(cfg *config.Config) *UploadManager {
 	um := &UploadManager{
 		config:      cfg,
@@ -50,8 +50,8 @@ func NewUploadManager(cfg *config.Config) *UploadManager {
 	return um
 }
 
-// CreateUploadSession creates a new chunked upload session for a file.
-// It validates file size, checks concurrent upload limits, and creates temporary files.
+// CreateUploadSession はファイルのための新しいチャンク分割アップロードセッションを作成します。
+// ファイルサイズの検証、同時アップロード制限のチェック、一時ファイルの作成を行います。
 func (um *UploadManager) CreateUploadSession(userID, filename, directory string, totalSize, chunkSize int64, totalChunks int) (*models.UploadSession, error) {
 	um.mu.Lock()
 	defer um.mu.Unlock()
@@ -113,7 +113,7 @@ func (um *UploadManager) CreateUploadSession(userID, filename, directory string,
 	return session, nil
 }
 
-// GetUploadSession retrieves an upload session by ID from memory or disk.
+// GetUploadSession はメモリまたはディスクからIDでアップロードセッションを取得します。
 func (um *UploadManager) GetUploadSession(uploadID string) (*models.UploadSession, error) {
 	um.mu.RLock()
 	defer um.mu.RUnlock()
@@ -127,8 +127,8 @@ func (um *UploadManager) GetUploadSession(uploadID string) (*models.UploadSessio
 	return session, nil
 }
 
-// SaveChunk saves a chunk of data to the appropriate offset in the temporary file.
-// It tracks uploaded chunks and updates the session metadata.
+// SaveChunk はデータのチャンクを一時ファイルの適切なオフセットに保存します。
+// アップロード済みチャンクを追跡し、セッションメタデータを更新します。
 func (um *UploadManager) SaveChunk(uploadID string, chunkNumber int, data []byte) error {
 	um.mu.Lock()
 	defer um.mu.Unlock()
@@ -183,7 +183,7 @@ func (um *UploadManager) SaveChunk(uploadID string, chunkNumber int, data []byte
 	return um.saveMetaFile(session)
 }
 
-// GetUploadedChunks returns the list of chunk numbers that have been successfully uploaded.
+// GetUploadedChunks は正常にアップロードされたチャンク番号のリストを返します。
 func (um *UploadManager) GetUploadedChunks(uploadID string) ([]int, error) {
 	um.mu.RLock()
 	defer um.mu.RUnlock()
@@ -200,8 +200,8 @@ func (um *UploadManager) GetUploadedChunks(uploadID string) ([]int, error) {
 	return session.UploadedChunks, nil
 }
 
-// CompleteUpload finalizes an upload by renaming the temporary file and cleaning up metadata.
-// It verifies all chunks are uploaded before completing.
+// CompleteUpload は一時ファイルをリネームしてメタデータをクリーンアップすることでアップロードを完了します。
+// 完了前にすべてのチャンクがアップロード済みであることを検証します。
 func (um *UploadManager) CompleteUpload(uploadID string) (*SavedFile, error) {
 	um.mu.Lock()
 	defer um.mu.Unlock()
@@ -253,7 +253,7 @@ func (um *UploadManager) CompleteUpload(uploadID string) (*SavedFile, error) {
 	}, nil
 }
 
-// CancelUpload cancels an upload session and removes all associated files.
+// CancelUpload はアップロードセッションをキャンセルし、関連するすべてのファイルを削除します。
 func (um *UploadManager) CancelUpload(uploadID string) error {
 	um.mu.Lock()
 	defer um.mu.Unlock()

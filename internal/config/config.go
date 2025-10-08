@@ -1,4 +1,4 @@
-// Package config provides application configuration loading and management.
+// Package config はアプリケーション設定の読み込みと管理を提供します。
 package config
 
 import (
@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config アプリケーション設定
+// Config はアプリケーション設定を表します。
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Discord  DiscordConfig  `yaml:"discord"`
@@ -19,7 +19,7 @@ type Config struct {
 	Storage  StorageConfig  `yaml:"storage"`
 }
 
-// ServerConfig サーバー設定
+// ServerConfig はサーバー設定を表します。
 type ServerConfig struct {
 	Port           string   `yaml:"port"`            // 16 bytes
 	ServiceName    string   `yaml:"service_name"`    // 16 bytes
@@ -28,7 +28,7 @@ type ServerConfig struct {
 	SecureCookie   bool     `yaml:"secure_cookie"`   // 1 byte (HTTPS環境でのみtrue)
 }
 
-// DiscordConfig Discord設定
+// DiscordConfig はDiscord設定を表します。
 type DiscordConfig struct {
 	BotToken     string `yaml:"bot_token"`
 	ClientID     string `yaml:"client_id"`
@@ -37,13 +37,13 @@ type DiscordConfig struct {
 	RedirectURL  string `yaml:"redirect_url"`
 }
 
-// DatabaseConfig データベース設定
+// DatabaseConfig はデータベース設定を表します。
 type DatabaseConfig struct {
 	Path           string `yaml:"path"`
 	MaxConnections int    `yaml:"max_connections"`
 }
 
-// StorageConfig ストレージ設定
+// StorageConfig はストレージ設定を表します。
 type StorageConfig struct {
 	UploadPath           string            `yaml:"upload_path"`
 	AdminRoleID          string            `yaml:"admin_role_id"`
@@ -57,7 +57,7 @@ type StorageConfig struct {
 	ChunkUploadEnabled   bool              `yaml:"chunk_upload_enabled"`
 }
 
-// DirectoryConfig ディレクトリ設定
+// DirectoryConfig はディレクトリ設定を表します。
 type DirectoryConfig struct {
 	Path          string   `yaml:"path"`
 	Type          string   `yaml:"type"`
@@ -65,7 +65,7 @@ type DirectoryConfig struct {
 	Permissions   []string `yaml:"permissions"`
 }
 
-// Load 設定ファイルを読み込み、環境変数で上書きする
+// Load は設定ファイルを読み込み、環境変数で上書きします。
 func Load(path string) (*Config, error) {
 	// #nosec G304 - Configuration file path is intentionally provided by the application
 	data, err := os.ReadFile(path)
@@ -166,7 +166,7 @@ func overrideFromEnv(cfg *Config) {
 	}
 }
 
-// GetDirectoryConfig ディレクトリパスから設定を取得
+// GetDirectoryConfig はディレクトリパスから設定を取得します。
 func (c *Config) GetDirectoryConfig(path string) *DirectoryConfig {
 	for i := range c.Storage.Directories {
 		if c.Storage.Directories[i].Path == path {
@@ -176,7 +176,7 @@ func (c *Config) GetDirectoryConfig(path string) *DirectoryConfig {
 	return nil
 }
 
-// HasPermission 指定された権限を持っているか確認
+// HasPermission は指定された権限を持っているか確認します。
 func (d *DirectoryConfig) HasPermission(permission string) bool {
 	for _, p := range d.Permissions {
 		if p == permission {

@@ -1,7 +1,7 @@
 package models
 
-// contextKey is a custom type for context keys to avoid collisions
+// ContextKey は衝突を避けるためのコンテキストキー用のカスタム型です。
 type ContextKey string
 
-// UserContextKey is the key for storing user information in context
+// UserContextKey はコンテキストにユーザー情報を保存するためのキーです。
 const UserContextKey ContextKey = "user"

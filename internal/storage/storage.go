@@ -1,5 +1,5 @@
-// Package storage provides file storage management functionality.
-// It handles file uploads, downloads, directory management, and file metadata.
+// Package storage はファイルストレージ管理機能を提供します。
+// ファイルのアップロード、ダウンロード、ディレクトリ管理、ファイルメタデータを処理します。
 package storage
 
 import (
@@ -16,27 +16,27 @@ import (
 	"github.com/google/uuid"
 )
 
-// Manager handles file storage operations including directory creation and file management.
+// Manager はディレクトリ作成とファイル管理を含むファイルストレージ操作を処理します。
 type Manager struct {
 	config *config.Config
 }
 
-// SavedFile represents a successfully saved file with its metadata.
+// SavedFile は正常に保存されたファイルとそのメタデータを表します。
 type SavedFile struct {
 	Filename string
 	Path     string
 	Size     int64
 }
 
-// NewManager creates a new storage manager instance with the provided configuration.
+// NewManager は提供された設定で新しいストレージマネージャーインスタンスを作成します。
 func NewManager(cfg *config.Config) *Manager {
 	return &Manager{
 		config: cfg,
 	}
 }
 
-// InitializeDirectories creates all directories defined in the configuration file.
-// It creates the root upload directory and all configured subdirectories with secure permissions.
+// InitializeDirectories は設定ファイルで定義されたすべてのディレクトリを作成します。
+// ルートアップロードディレクトリと、安全な権限を持つすべての設定されたサブディレクトリを作成します。
 func (m *Manager) InitializeDirectories() error {
 	// アップロードルートディレクトリ作成
 	if err := os.MkdirAll(m.config.Storage.UploadPath, 0750); err != nil {
@@ -57,9 +57,9 @@ func (m *Manager) InitializeDirectories() error {
 	return nil
 }
 
-// EnsureUserDirectory creates a user-specific directory if it doesn't exist.
-// This is called on-demand when a user first uploads to their personal directory.
-// directoryName should be the user's directory name (e.g., "username")
+// EnsureUserDirectory はユーザー専用ディレクトリが存在しない場合に作成します。
+// これは、ユーザーが個人ディレクトリに初めてアップロードする際にオンデマンドで呼び出されます。
+// directoryName はユーザーのディレクトリ名（例: "username"）である必要があります。
 func (m *Manager) EnsureUserDirectory(directoryName string) error {
 	userDir := filepath.Join(m.config.Storage.UploadPath, "user", directoryName)
 	if err := os.MkdirAll(userDir, 0750); err != nil {
@@ -68,8 +68,8 @@ func (m *Manager) EnsureUserDirectory(directoryName string) error {
 	return nil
 }
 
-// SaveFile saves a file to the specified directory with a unique UUID-based filename.
-// It returns metadata about the saved file including the generated filename, path, and size.
+// SaveFile はファイルを一意のUUIDベースのファイル名で指定されたディレクトリに保存します。
+// 生成されたファイル名、パス、サイズを含む保存されたファイルのメタデータを返します。
 func (m *Manager) SaveFile(file io.Reader, filename, directory string) (*SavedFile, error) {
 	// ファイル名生成（UUID + 元のファイル名）
 	fileID := uuid.New().String()
@@ -106,8 +106,8 @@ func (m *Manager) SaveFile(file io.Reader, filename, directory string) (*SavedFi
 	}, nil
 }
 
-// ListFiles returns a list of all files in the specified directory.
-// It excludes temporary files (.temp) and metadata files (.meta) from the listing.
+// ListFiles は指定されたディレクトリ内のすべてのファイルのリストを返します。
+// 一時ファイル（.temp）とメタデータファイル（.meta）はリストから除外されます。
 func (m *Manager) ListFiles(directory string) ([]models.FileInfo, error) {
 	dirPath := filepath.Join(m.config.Storage.UploadPath, directory)
 
@@ -146,7 +146,7 @@ func (m *Manager) ListFiles(directory string) ([]models.FileInfo, error) {
 	return files, nil
 }
 
-// DeleteFile removes a file from the specified directory.
+// DeleteFile は指定されたディレクトリからファイルを削除します。
 func (m *Manager) DeleteFile(directory, filename string) error {
 	filePath := filepath.Join(m.config.Storage.UploadPath, directory, filename)
 	return os.Remove(filePath)

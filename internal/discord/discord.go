@@ -1,4 +1,4 @@
-// Package discord provides Discord API client functionality for role-based access control.
+// Package discord はロールベースのアクセス制御のためのDiscord APIクライアント機能を提供します。
 package discord
 
 import (
@@ -16,7 +16,7 @@ const (
 	discordAPIBase = "https://discord.com/api/v10"
 )
 
-// Client Discord APIクライアント
+// Client はDiscord APIクライアントを表します。
 type Client struct {
 	httpClient *http.Client           // 8 bytes
 	cache      map[string]*cacheEntry // 8 bytes
@@ -32,25 +32,25 @@ type cacheEntry struct {
 	roles     []string
 }
 
-// GuildMember Discord APIレスポンス
+// GuildMember はDiscord APIのレスポンスを表します。
 type GuildMember struct {
 	User  User     `json:"user"`
 	Roles []string `json:"roles"`
 }
 
-// User ユーザー情報
+// User はユーザー情報を表します。
 type User struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
 }
 
-// ErrorResponse Discord APIエラーレスポンス
+// ErrorResponse はDiscord APIエラーレスポンスです。
 type ErrorResponse struct {
 	Message string `json:"message"`
 	Code    int    `json:"code"`
 }
 
-// NewClient Discordクライアントを作成
+// NewClient はDiscordクライアントを作成します。
 func NewClient(botToken, guildID string) *Client {
 	return &Client{
 		botToken:   botToken,
@@ -61,7 +61,7 @@ func NewClient(botToken, guildID string) *Client {
 	}
 }
 
-// GetMemberRoles ユーザーのロールIDリストを取得
+// GetMemberRoles はユーザーのロールIDリストを取得します。
 func (c *Client) GetMemberRoles(userID string) ([]string, error) {
 	// キャッシュチェック
 	c.cacheMutex.RLock()
@@ -141,14 +141,14 @@ func (c *Client) GetMemberRoles(userID string) ([]string, error) {
 	return member.Roles, nil
 }
 
-// ClearCache キャッシュをクリア（テスト用）
+// ClearCache はキャッシュをクリアします（テスト用）。
 func (c *Client) ClearCache() {
 	c.cacheMutex.Lock()
 	defer c.cacheMutex.Unlock()
 	c.cache = make(map[string]*cacheEntry)
 }
 
-// SetCacheTTL キャッシュTTLを設定（テスト用）
+// SetCacheTTL はキャッシュTTLを設定します（テスト用）。
 func (c *Client) SetCacheTTL(ttl time.Duration) {
 	c.cacheTTL = ttl
 }

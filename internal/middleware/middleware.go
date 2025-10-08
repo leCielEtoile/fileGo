@@ -1,4 +1,4 @@
-// Package middleware provides HTTP middleware functions for the file server.
+// Package middleware はファイルサーバー用のHTTPミドルウェア関数を提供します。
 package middleware
 
 import (
@@ -15,7 +15,7 @@ import (
 	"fileserver/internal/models"
 )
 
-// Logger logging middleware
+// Logger はロギングミドルウェアです。
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -37,7 +37,7 @@ func Logger(next http.Handler) http.Handler {
 	})
 }
 
-// responseWriter custom response writer for status code tracking
+// responseWriter はステータスコード追跡のためのカスタムレスポンスライターです。
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode int
@@ -48,7 +48,7 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// Recoverer panic recovery middleware
+// Recoverer はパニック回復ミドルウェアです。
 func Recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -62,7 +62,7 @@ func Recoverer(next http.Handler) http.Handler {
 	})
 }
 
-// RealIP middleware to get real IP address
+// RealIP は実際のIPアドレスを取得するミドルウェアです。
 func RealIP(behindProxy bool, trustedProxies []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -86,7 +86,7 @@ func RealIP(behindProxy bool, trustedProxies []string) func(http.Handler) http.H
 	}
 }
 
-// isTrustedProxy check if IP is trusted proxy
+// isTrustedProxy はIPが信頼されたプロキシかどうかをチェックします。
 func isTrustedProxy(ip string, trustedProxies []string) bool {
 	parsedIP := net.ParseIP(ip)
 	if parsedIP == nil {
@@ -106,7 +106,7 @@ func isTrustedProxy(ip string, trustedProxies []string) bool {
 	return false
 }
 
-// AuthMiddleware authentication middleware
+// AuthMiddleware は認証ミドルウェアです。
 func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
