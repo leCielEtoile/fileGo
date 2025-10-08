@@ -2,7 +2,7 @@
 FROM golang:1.25-alpine AS builder
 
 # 必要なパッケージをインストール
-RUN apk add --no-cache git gcc musl-dev
+RUN apk add --no-cache git
 
 WORKDIR /build
 
@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # バイナリをビルド
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o fileserver .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o fileserver .
 
 # 実行ステージ
 FROM alpine:latest
