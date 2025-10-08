@@ -11,26 +11,26 @@ import (
 	"fileserver/internal/models"
 )
 
-// SSEEvent イベントの種類
+// SSEEvent はイベントの種類を表します。
 type SSEEvent struct {
 	Data interface{}
 	Type string
 }
 
-// SSEHandler Server-Sent Eventsハンドラー
+// SSEHandler はServer-Sent Eventsハンドラーを表します。
 type SSEHandler struct {
 	clients map[chan SSEEvent]bool
 	mu      sync.RWMutex
 }
 
-// NewSSEHandler SSEハンドラーを作成
+// NewSSEHandler はSSEハンドラーを作成します。
 func NewSSEHandler() *SSEHandler {
 	return &SSEHandler{
 		clients: make(map[chan SSEEvent]bool),
 	}
 }
 
-// HandleSSE SSEエンドポイント
+// HandleSSE はSSEエンドポイントを処理します。
 func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	// SSE用のヘッダー設定
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -110,7 +110,7 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// BroadcastFileUpload ファイルアップロードイベントをブロードキャスト
+// BroadcastFileUpload はファイルアップロードイベントをブロードキャストします。
 func (h *SSEHandler) BroadcastFileUpload(user *models.User, directory, filename string, size int64) {
 	h.broadcast(SSEEvent{
 		Type: "file_upload",
@@ -125,7 +125,7 @@ func (h *SSEHandler) BroadcastFileUpload(user *models.User, directory, filename 
 	})
 }
 
-// BroadcastFileDownload ファイルダウンロードイベントをブロードキャスト
+// BroadcastFileDownload はファイルダウンロードイベントをブロードキャストします。
 func (h *SSEHandler) BroadcastFileDownload(user *models.User, directory, filename string) {
 	h.broadcast(SSEEvent{
 		Type: "file_download",
@@ -139,7 +139,7 @@ func (h *SSEHandler) BroadcastFileDownload(user *models.User, directory, filenam
 	})
 }
 
-// BroadcastFileDelete ファイル削除イベントをブロードキャスト
+// BroadcastFileDelete はファイル削除イベントをブロードキャストします。
 func (h *SSEHandler) BroadcastFileDelete(user *models.User, directory, filename string) {
 	h.broadcast(SSEEvent{
 		Type: "file_delete",
@@ -153,7 +153,7 @@ func (h *SSEHandler) BroadcastFileDelete(user *models.User, directory, filename 
 	})
 }
 
-// BroadcastUserLogin ユーザーログインイベントをブロードキャスト
+// BroadcastUserLogin はユーザーログインイベントをブロードキャストします。
 func (h *SSEHandler) BroadcastUserLogin(user *models.User) {
 	h.broadcast(SSEEvent{
 		Type: "user_login",
@@ -183,7 +183,7 @@ func (h *SSEHandler) broadcast(event SSEEvent) {
 	slog.Debug("SSE event broadcasted", "type", event.Type, "clients", len(h.clients))
 }
 
-// GetClientCount 接続中のクライアント数を取得
+// GetClientCount は接続中のクライアント数を取得します。
 func (h *SSEHandler) GetClientCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()

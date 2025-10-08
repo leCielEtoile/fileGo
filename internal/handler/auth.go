@@ -1,4 +1,4 @@
-// Package handler provides HTTP handlers for authentication, file operations, and SSE.
+// Package handler は認証、ファイル操作、SSE用のHTTPハンドラーを提供します。
 package handler
 
 import (
@@ -18,7 +18,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// AuthHandler handles authentication-related HTTP requests.
+// AuthHandler は認証関連のHTTPリクエストを処理します。
 type AuthHandler struct {
 	config      *config.Config
 	db          *sql.DB
@@ -26,7 +26,7 @@ type AuthHandler struct {
 	sseHandler  *SSEHandler
 }
 
-// NewAuthHandler creates a new AuthHandler instance.
+// NewAuthHandler は新しいAuthHandlerインスタンスを作成します。
 func NewAuthHandler(cfg *config.Config, db *sql.DB) *AuthHandler {
 	oauthConfig := &oauth2.Config{
 		ClientID:     cfg.Discord.ClientID,
@@ -46,12 +46,12 @@ func NewAuthHandler(cfg *config.Config, db *sql.DB) *AuthHandler {
 	}
 }
 
-// SetSSEHandler sets the SSE handler for broadcasting events.
+// SetSSEHandler はイベントのブロードキャスト用にSSEハンドラーを設定します。
 func (h *AuthHandler) SetSSEHandler(sse *SSEHandler) {
 	h.sseHandler = sse
 }
 
-// Login handles the OAuth2 login initiation.
+// Login はOAuth2ログインの開始を処理します。
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	state := generateRandomString(32)
 
@@ -70,7 +70,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
-// Callback handles the OAuth2 callback from Discord.
+// Callback はDiscordからのOAuth2コールバックを処理します。
 func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// state検証
 	stateCookie, err := r.Cookie("oauth_state")
@@ -173,7 +173,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// Logout handles user logout by invalidating the session.
+// Logout はセッションを無効化してユーザーのログアウトを処理します。
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_token")
 	if err == nil {
@@ -198,7 +198,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// GetCurrentUser returns the currently authenticated user information.
+// GetCurrentUser は現在認証されているユーザー情報を返します。
 func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	userVal := r.Context().Value(models.UserContextKey)
 	if userVal == nil {
