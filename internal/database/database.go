@@ -24,7 +24,7 @@ func Initialize(dbPath string) (*sql.DB, error) {
 	// テーブル作成
 	if err := createTables(db); err != nil {
 		if closeErr := db.Close(); closeErr != nil {
-			return nil, fmt.Errorf("テーブル作成エラー: %w (クローズエラー: %v)", err, closeErr)
+			return nil, fmt.Errorf("テーブル作成エラー: %w (クローズエラー: %w)", err, closeErr)
 		}
 		return nil, fmt.Errorf("テーブル作成エラー: %w", err)
 	}
