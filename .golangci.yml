@@ -92,5 +92,8 @@ issues:
 
 output:
   formats:
-    - colored-line-number
-  show-stats: true
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
