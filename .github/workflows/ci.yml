@@ -127,9 +127,17 @@ jobs:
         continue-on-error: true
 
   docker:
-    name: Docker Build and Push
+    name: Docker Build and Push (${{ matrix.platform }})
     runs-on: ubuntu-latest
     needs: [lint, test]
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            platform_tag: amd64
+          - platform: linux/arm64
+            platform_tag: arm64
+            skip_on_pr: true
     permissions:
       contents: read
       packages: write
@@ -137,10 +145,15 @@ jobs:
       security-events: write
 
     steps:
+      - name: Skip ARM64 on PR
+        if: github.event_name == 'pull_request' && matrix.skip_on_pr
+        run: echo "Skipping ARM64 build for PR" && exit 0
+
       - name: Checkout code
         uses: actions/checkout@v5
 
       - name: Set up QEMU
+        if: matrix.platform == 'linux/arm64'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -167,28 +180,29 @@ jobs:
             type=semver,pattern={{major}}
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
+          flavor: |
+            suffix=-${{ matrix.platform_tag }}
 
       - name: Build and push Docker image
         id: build-and-push
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          platforms: ${{ matrix.platform }}
           push: ${{ github.event_name != 'pull_request' }}
-          load: ${{ github.event_name == 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' && matrix.platform == 'linux/amd64' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          outputs: ${{ github.event_name == 'pull_request' && 'type=docker,dest=/tmp/image.tar' || '' }}
+          cache-from: type=gha,scope=${{ matrix.platform_tag }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform_tag }}
+          outputs: ${{ github.event_name == 'pull_request' && matrix.platform == 'linux/amd64' && 'type=docker,dest=/tmp/image.tar' || '' }}
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
             VCS_REF=${{ github.sha }}
-            BUILDKIT_INLINE_CACHE=1
 
       - name: Upload Docker image artifact
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && matrix.platform == 'linux/amd64'
         uses: actions/upload-artifact@v4
         with:
           name: docker-image
@@ -196,6 +210,7 @@ jobs:
           retention-days: 1
 
       - name: Run Trivy vulnerability scanner on Docker image
+        if: matrix.platform == 'linux/amd64'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ github.event_name == 'pull_request' && 'tarball:/tmp/image.tar' || format('{0}/{1}:{2}', env.REGISTRY, env.IMAGE_NAME, steps.meta.outputs.version) }}
@@ -204,22 +219,59 @@ jobs:
         continue-on-error: true
 
       - name: Upload Trivy results to GitHub Security
+        if: matrix.platform == 'linux/amd64'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
         continue-on-error: true
 
+  docker-manifest:
+    name: Create Docker Manifest
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Create and push multi-platform manifest
+        run: |
+          TAGS="${{ steps.meta.outputs.tags }}"
+          for tag in $TAGS; do
+            docker buildx imagetools create -t ${tag} \
+              ${tag}-amd64 \
+              ${tag}-arm64
+          done
+
       - name: Generate SBOM
-        if: github.event_name != 'pull_request'
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
           format: spdx-json
           output-file: sbom.spdx.json
         continue-on-error: true
 
       - name: Upload SBOM
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: sbom
