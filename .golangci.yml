@@ -24,67 +24,67 @@ linters:
     - godot           # Disabled for Japanese comments
     - misspell        # Disabled for development efficiency
     - unconvert       # Disabled for development efficiency
-    - gosimple        # Disabled for development efficiency
     - predeclared     # Disabled for development efficiency
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
 
-  govet:
-    enable-all: true
+    govet:
+      enable-all: true
 
-  revive:
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+        - name: var-naming
+          disabled: false
+        - name: package-comments
+          disabled: false
+        - name: error-return
+          disabled: false
+        - name: error-naming
+          disabled: false
+        - name: if-return
+          disabled: false
+        - name: var-declaration
+          disabled: false
+        - name: unexported-return
+          disabled: false
+
+    gosec:
+      excludes:
+        - G404  # Use of weak random number generator (we use crypto/rand where needed)
+      config:
+        G101:
+          pattern: "(?i)passwd|password|token|secret"
+
+  exclusions:
     rules:
-      - name: exported
-        disabled: false
-      - name: var-naming
-        disabled: false
-      - name: package-comments
-        disabled: false
-      - name: error-return
-        disabled: false
-      - name: error-naming
-        disabled: false
-      - name: if-return
-        disabled: false
-      - name: var-declaration
-        disabled: false
-      - name: unexported-return
-        disabled: false
+      # Exclude some linters from running on tests files
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+          - unparam
 
-  gosec:
-    excludes:
-      - G404  # Use of weak random number generator (we use crypto/rand where needed)
-    config:
-      G101:
-        pattern: "(?i)passwd|password|token|secret"
+      # Exclude known issues in auto-generated code
+      - path: internal/models/
+        linters:
+          - revive
+
+      # Allow package comment to be on second line for main package
+      - path: main\.go
+        linters:
+          - revive
+        text: "package-comments"
+
+    paths:
+      - vendor
+      - .github
 
 issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec
-        - unparam
-
-    # Exclude known issues in auto-generated code
-    - path: internal/models/
-      linters:
-        - revive
-
-    # Allow package comment to be on second line for main package
-    - path: main\.go
-      linters:
-        - revive
-      text: "package-comments"
-
-  exclude-dirs:
-    - vendor
-    - .github
-
   max-same-issues: 0
   max-issues-per-linter: 0
 
