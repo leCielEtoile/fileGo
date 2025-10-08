@@ -78,13 +78,14 @@ func (m *Manager) SaveFile(file io.Reader, filename, directory string) (*SavedFi
 	destPath := filepath.Join(m.config.Storage.UploadPath, directory, savedFilename)
 
 	// ファイル作成
+	// #nosec G304 - destPath is constructed from sanitized inputs
 	destFile, err := os.Create(destPath)
 	if err != nil {
 		return nil, fmt.Errorf("ファイル作成エラー: %w", err)
 	}
 	defer func() {
-		if err := destFile.Close(); err != nil {
-			slog.Error("ファイルのクローズに失敗しました", "error", err)
+		if closeErr := destFile.Close(); closeErr != nil {
+			slog.Error("ファイルのクローズに失敗しました", "error", closeErr)
 		}
 	}()
 

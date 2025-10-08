@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -90,7 +91,9 @@ func (c *Client) GetMemberRoles(userID string) ([]string, error) {
 		return nil, fmt.Errorf("discord API呼び出しエラー: %w", err)
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Error("レスポンスボディのクローズに失敗", "error", closeErr)
+		}
 	}()
 
 	body, err := io.ReadAll(resp.Body)

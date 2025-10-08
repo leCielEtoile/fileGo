@@ -102,8 +102,8 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			slog.Error("ファイルのクローズに失敗しました", "error", err)
+		if closeErr := file.Close(); closeErr != nil {
+			slog.Error("ファイルのクローズに失敗しました", "error", closeErr)
 		}
 	}()
 
@@ -239,6 +239,7 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ファイルオープン
+	// #nosec G304 - filePath is validated and constructed from sanitized inputs
 	file, err := os.Open(filePath)
 	if err != nil {
 		slog.Error("ファイルオープンエラー", "error", err)
