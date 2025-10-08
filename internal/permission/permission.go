@@ -88,7 +88,7 @@ func (pc *Checker) checkUserPrivatePermission(userID, _ string, pathParts []stri
 		return true, nil
 	}
 
-	// /user/{targetUserDirName} の場合 (targetUserDirName is @username)
+	// /user/{targetUserDirName} の場合 (targetUserDirName is username)
 	if len(pathParts) >= 2 {
 		targetUserDirName := pathParts[1]
 
@@ -140,7 +140,7 @@ func (pc *Checker) isAdmin(userID string) (bool, error) {
 	return false, nil
 }
 
-// getUserDirectoryName gets the user's directory name (@username) from database
+// getUserDirectoryName gets the user's directory name (username) from database
 func (pc *Checker) getUserDirectoryName(userID string) (string, error) {
 	var username string
 	err := pc.db.QueryRowContext(context.Background(),
@@ -148,7 +148,7 @@ func (pc *Checker) getUserDirectoryName(userID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("ユーザー名の取得に失敗しました: %w", err)
 	}
-	return "@" + username, nil
+	return username, nil
 }
 
 // GetAccessibleDirectories returns a list of directories the user can access.

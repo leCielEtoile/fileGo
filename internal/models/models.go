@@ -11,9 +11,9 @@ type User struct {
 	Avatar        string    `json:"avatar"`
 }
 
-// GetDirectoryName returns the directory name for the user (@ + username)
+// GetDirectoryName returns the directory name for the user (username)
 func (u *User) GetDirectoryName() string {
-	return "@" + u.Username
+	return u.Username
 }
 
 type Session struct {
