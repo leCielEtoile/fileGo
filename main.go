@@ -61,7 +61,7 @@ func main() {
 	discordClient := discord.NewClient(cfg.Discord.BotToken, cfg.Discord.GuildID)
 
 	// 権限チェッカー初期化
-	permissionChecker := permission.NewChecker(cfg, discordClient)
+	permissionChecker := permission.NewChecker(cfg, discordClient, db)
 
 	// SSEハンドラー初期化
 	sseHandler := handler.NewSSEHandler()
