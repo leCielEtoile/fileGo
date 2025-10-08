@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -204,6 +205,19 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	directory := chi.URLParam(r, "directory")
 	filename := chi.URLParam(r, "filename")
 
+	// URLデコード
+	var err error
+	directory, err = url.PathUnescape(directory)
+	if err != nil {
+		http.Error(w, "無効なディレクトリパスです", http.StatusBadRequest)
+		return
+	}
+	filename, err = url.PathUnescape(filename)
+	if err != nil {
+		http.Error(w, "無効なファイル名です", http.StatusBadRequest)
+		return
+	}
+
 	// パストラバーサル対策
 	directory = filepath.Clean(directory)
 	if strings.Contains(directory, "..") || strings.Contains(filename, "..") {
@@ -305,6 +319,19 @@ func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	directory := chi.URLParam(r, "directory")
 	filename := chi.URLParam(r, "filename")
+
+	// URLデコード
+	var err error
+	directory, err = url.PathUnescape(directory)
+	if err != nil {
+		http.Error(w, "無効なディレクトリパスです", http.StatusBadRequest)
+		return
+	}
+	filename, err = url.PathUnescape(filename)
+	if err != nil {
+		http.Error(w, "無効なファイル名です", http.StatusBadRequest)
+		return
+	}
 
 	// パストラバーサル対策
 	directory = filepath.Clean(directory)

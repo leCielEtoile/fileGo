@@ -59,7 +59,7 @@ func (m *Manager) InitializeDirectories() error {
 
 // EnsureUserDirectory creates a user-specific directory if it doesn't exist.
 // This is called on-demand when a user first uploads to their personal directory.
-// directoryName should be the user's directory name (e.g., "@username")
+// directoryName should be the user's directory name (e.g., "username")
 func (m *Manager) EnsureUserDirectory(directoryName string) error {
 	userDir := filepath.Join(m.config.Storage.UploadPath, "user", directoryName)
 	if err := os.MkdirAll(userDir, 0750); err != nil {
