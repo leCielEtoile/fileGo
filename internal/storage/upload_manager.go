@@ -93,6 +93,7 @@ func (um *UploadManager) CreateUploadSession(userID, filename, directory string,
 		return nil, err
 	}
 
+	// #nosec G304 - tempPath is constructed from sanitized inputs
 	tempFile, err := os.Create(tempPath)
 	if err != nil {
 		return nil, err
@@ -152,6 +153,7 @@ func (um *UploadManager) SaveChunk(uploadID string, chunkNumber int, data []byte
 
 	// .tempファイルに書き込み
 	tempPath := um.getTempFilePath(uploadID, session.Filename, session.Directory)
+	// #nosec G304 - tempPath is constructed from sanitized inputs
 	file, err := os.OpenFile(tempPath, os.O_WRONLY, 0600)
 	if err != nil {
 		return err
@@ -348,6 +350,7 @@ func (um *UploadManager) cleanupOrphanedFiles() {
 			// .metaファイルの場合
 			if filepath.Ext(path) == ".meta" {
 				// メタファイルから有効期限を読み取る
+				// #nosec G304 - path is from filepath.Walk which traverses only configured directories
 				data, err := os.ReadFile(path)
 				if err != nil {
 					return nil

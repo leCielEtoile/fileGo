@@ -233,7 +233,9 @@ func (h *AuthHandler) getDiscordUser(accessToken string) (*models.DiscordUser, e
 		return nil, err
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Error("レスポンスボディのクローズに失敗", "error", closeErr)
+		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {
@@ -263,7 +265,9 @@ func (h *AuthHandler) checkGuildMembership(accessToken, _ string) (bool, error) 
 		return false, err
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Error("レスポンスボディのクローズに失敗", "error", closeErr)
+		}
 	}()
 
 	return resp.StatusCode == http.StatusOK, nil
