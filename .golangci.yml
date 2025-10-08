@@ -92,6 +92,5 @@ issues:
 
 output:
   formats:
-    - format: colored-line-number
-      path: stdout
+    - colored-line-number
   show-stats: true
