@@ -11,6 +11,11 @@ type User struct {
 	Avatar        string    `json:"avatar"`
 }
 
+// GetDirectoryName returns the directory name for the user (@ + username)
+func (u *User) GetDirectoryName() string {
+	return "@" + u.Username
+}
+
 type Session struct {
 	ExpiresAt           time.Time `json:"expires_at"`
 	CreatedAt           time.Time `json:"created_at"`

@@ -3,6 +3,8 @@
 package permission
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -15,14 +17,16 @@ import (
 type Checker struct {
 	config        *config.Config
 	discordClient *discord.Client
+	db            *sql.DB
 }
 
 // NewChecker creates a new permission checker instance.
 // It requires a configuration and Discord client for role-based permission checks.
-func NewChecker(cfg *config.Config, dc *discord.Client) *Checker {
+func NewChecker(cfg *config.Config, dc *discord.Client, db *sql.DB) *Checker {
 	return &Checker{
 		config:        cfg,
 		discordClient: dc,
+		db:            db,
 	}
 }
 
@@ -84,12 +88,18 @@ func (pc *Checker) checkUserPrivatePermission(userID, _ string, pathParts []stri
 		return true, nil
 	}
 
-	// /user/{targetUserID} の場合
+	// /user/{targetUserDirName} の場合 (targetUserDirName is @username)
 	if len(pathParts) >= 2 {
-		targetUserID := pathParts[1]
+		targetUserDirName := pathParts[1]
+
+		// 自分のディレクトリ名を取得
+		myDirName, err := pc.getUserDirectoryName(userID)
+		if err != nil {
+			return false, err
+		}
 
 		// 本人の場合はアクセス許可
-		if targetUserID == userID {
+		if targetUserDirName == myDirName {
 			return true, nil
 		}
 
@@ -130,6 +140,17 @@ func (pc *Checker) isAdmin(userID string) (bool, error) {
 	return false, nil
 }
 
+// getUserDirectoryName gets the user's directory name (@username) from database
+func (pc *Checker) getUserDirectoryName(userID string) (string, error) {
+	var username string
+	err := pc.db.QueryRowContext(context.Background(),
+		"SELECT username FROM users WHERE discord_id = ?", userID).Scan(&username)
+	if err != nil {
+		return "", fmt.Errorf("ユーザー名の取得に失敗しました: %w", err)
+	}
+	return "@" + username, nil
+}
+
 // GetAccessibleDirectories returns a list of directories the user can access.
 // It checks user roles against directory requirements and handles special cases like user_private directories.
 func (pc *Checker) GetAccessibleDirectories(userID string) ([]config.DirectoryConfig, error) {
@@ -146,8 +167,13 @@ func (pc *Checker) GetAccessibleDirectories(userID string) ([]config.DirectoryCo
 	for _, dirConfig := range pc.config.Storage.Directories {
 		// user_private タイプの場合は、ユーザー個別ディレクトリパスに変換
 		if dirConfig.Type == "user_private" {
+			userDirName, err := pc.getUserDirectoryName(userID)
+			if err != nil {
+				slog.Error("ユーザーディレクトリ名取得エラー", "user_id", userID, "error", err)
+				continue
+			}
 			userDirConfig := dirConfig
-			userDirConfig.Path = fmt.Sprintf("user/%s", userID)
+			userDirConfig.Path = fmt.Sprintf("user/%s", userDirName)
 			accessible = append(accessible, userDirConfig)
 			continue
 		}
