@@ -102,31 +102,39 @@ function renderDirectories() {
         return;
     }
 
-    container.innerHTML = state.directories.map(dir => `
-        <div class="cursor-pointer px-3 py-2 rounded-lg transition-all mb-1 ${
-            state.selectedDirectory === dir.path
-                ? 'bg-discord-500 text-white shadow-md'
+    container.innerHTML = state.directories.map(dir => {
+        const isSelected = state.selectedDirectory === dir.path;
+        const permissionBadges = dir.permissions.map(p => {
+            const badgeConfig = {
+                'read': { icon: `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>`, label: '読取', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+                'write': { icon: `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>`, label: '書込', color: 'bg-green-500/10 text-green-600 dark:text-green-400' },
+                'delete': { icon: `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>`, label: '削除', color: 'bg-red-500/10 text-red-600 dark:text-red-400' }
+            };
+            const config = badgeConfig[p] || { icon: '', label: p, color: 'bg-gray-500/10 text-gray-600' };
+            return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${config.color}" title="${config.label}">${config.icon}</span>`;
+        }).join('');
+
+        return `
+        <div class="group cursor-pointer px-3 py-2.5 rounded-lg transition-all mb-1 ${
+            isSelected
+                ? 'bg-gradient-to-r from-discord-500 to-discord-600 text-white shadow-lg shadow-discord-500/30'
                 : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
         }"
              onclick="selectDirectory('${dir.path}')">
-            <div class="flex items-center gap-2">
-                <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
-                </svg>
-                <span class="font-semibold text-sm truncate">${dir.path}</span>
+            <div class="flex items-center gap-2 mb-2">
+                <div class="flex-shrink-0 w-8 h-8 ${isSelected ? 'bg-white/20' : 'bg-discord-500/10'} rounded-lg flex items-center justify-center">
+                    <svg class="w-4 h-4 ${isSelected ? 'text-white' : 'text-discord-500'}" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                    </svg>
+                </div>
+                <span class="font-semibold text-sm truncate flex-1">${dir.path}</span>
             </div>
-            <div class="flex gap-1 mt-2 flex-wrap">
-                ${dir.permissions.map(p => {
-                    const iconMap = {
-                        'read': '👁',
-                        'write': '✏️',
-                        'delete': '🗑️'
-                    };
-                    return `<span class="text-xs opacity-75">${iconMap[p] || p}</span>`;
-                }).join(' ')}
+            <div class="flex gap-1 flex-wrap">
+                ${permissionBadges}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // パンくずリスト更新
@@ -459,16 +467,22 @@ async function handleDroppedFiles(files) {
 async function uploadSingleFile(file) {
     console.log('アップロード開始:', file.name, formatFileSize(file.size));
 
+    // 進行中リストに追加
+    const uploadId = addActiveUpload(file, state.selectedDirectory);
+
     // 100MB以上はチャンクアップロード
     if (file.size > 100 * 1024 * 1024) {
-        await uploadFileInChunks(file);
+        await uploadFileInChunks(file, uploadId);
     } else {
-        await uploadFileNormal(file);
+        await uploadFileNormal(file, uploadId);
     }
 }
 
 // 通常アップロード（リファクタリング）
-async function uploadFileNormal(file) {
+async function uploadFileNormal(file, uploadId) {
+    const upload = activeUploads[uploadId];
+    if (!upload) return;
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('directory', state.selectedDirectory);
@@ -477,34 +491,63 @@ async function uploadFileNormal(file) {
     setProgress(0);
 
     try {
-        const response = await fetch('/files/upload', {
-            method: 'POST',
-            body: formData,
-            credentials: 'include'
+        const xhr = new XMLHttpRequest();
+
+        // プログレス更新
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                setProgress(percent);
+                updateUploadProgress(uploadId, percent);
+            }
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            addActivityLog('upload', `${file.name} をアップロードしました`);
-            if (window.toast) toast.success(`${file.name} のアップロードが完了しました`);
-            setProgress(100);
-            await loadFiles(state.selectedDirectory);
-        } else {
-            const error = await response.text();
-            addActivityLog('error', `アップロード失敗: ${error}`);
-            if (window.toast) toast.error(`アップロード失敗: ${error}`);
-        }
+        // 完了
+        xhr.addEventListener('load', async () => {
+            if (xhr.status === 200) {
+                addActivityLog('upload', `${file.name} をアップロードしました`);
+                if (window.toast) toast.success(`${file.name} のアップロードが完了しました`);
+                updateUploadProgress(uploadId, 100, 'completed');
+                await loadFiles(state.selectedDirectory);
+            } else {
+                addActivityLog('error', `アップロード失敗: ${xhr.responseText}`);
+                if (window.toast) toast.error(`アップロード失敗`);
+                updateUploadProgress(uploadId, upload.progress, 'failed');
+            }
+        });
+
+        // エラー
+        xhr.addEventListener('error', () => {
+            console.error('アップロードエラー');
+            addActivityLog('error', 'アップロードに失敗しました');
+            if (window.toast) toast.error('アップロードに失敗しました');
+            updateUploadProgress(uploadId, upload.progress, 'failed');
+        });
+
+        // キャンセル対応
+        upload.abortController.signal.addEventListener('abort', () => {
+            xhr.abort();
+        });
+
+        xhr.open('POST', '/files/upload');
+        xhr.withCredentials = true;
+        xhr.send(formData);
+
     } catch (error) {
         console.error('アップロードエラー:', error);
         addActivityLog('error', 'アップロードに失敗しました');
         if (window.toast) toast.error('アップロードに失敗しました');
+        updateUploadProgress(uploadId, upload.progress, 'failed');
     } finally {
         setTimeout(() => showProgress(false), 500);
     }
 }
 
 // チャンクアップロード（レジューム対応）
-async function uploadFileInChunks(file) {
+async function uploadFileInChunks(file, uploadId) {
+    const upload = activeUploads[uploadId];
+    if (!upload) return;
+
     const chunkSize = 20 * 1024 * 1024; // 20MB
     const totalChunks = Math.ceil(file.size / chunkSize);
     const storageKey = `upload_${file.name}_${file.size}_${state.selectedDirectory}`;
@@ -570,6 +613,9 @@ async function uploadFileInChunks(file) {
             const result = await initResponse.json();
             upload_id = result.upload_id;
 
+            // アップロードIDを設定
+            setUploadChunkId(uploadId, upload_id);
+
             // セッション情報を保存
             localStorage.setItem(storageKey, JSON.stringify({
                 uploadId: upload_id,
@@ -603,6 +649,7 @@ async function uploadFileInChunks(file) {
                     uploaded = true;
                     const progress = Math.round(((i + 1) / totalChunks) * 100);
                     setProgress(progress);
+                    updateUploadProgress(uploadId, progress);
                 } catch (err) {
                     retries--;
                     if (retries > 0) {
@@ -631,12 +678,14 @@ async function uploadFileInChunks(file) {
 
         addActivityLog('upload', `${file.name} のアップロードが完了しました`);
         if (window.toast) toast.success(`${file.name} のアップロードが完了しました`);
+        updateUploadProgress(uploadId, 100, 'completed');
         await loadFiles(state.selectedDirectory);
 
     } catch (error) {
         console.error('チャンクアップロードエラー:', error);
         addActivityLog('error', error.message);
         if (window.toast) toast.error(error.message);
+        updateUploadProgress(uploadId, upload.progress, 'failed');
         // エラー時もセッション情報は保持（レジューム可能にする）
     } finally {
         setTimeout(() => showProgress(false), 500);
@@ -705,22 +754,34 @@ function connectSSE() {
     const eventSource = new EventSource('/api/events');
     state.eventSource = eventSource;
 
-    const statusEl = document.getElementById('sse-status');
-    statusEl.textContent = '接続中...';
-    statusEl.className = 'sse-status';
+    const statusDot = document.getElementById('sse-status-dot');
+    const statusText = document.getElementById('sse-status-text');
+
+    if (statusDot) {
+        statusDot.className = 'absolute top-1 right-1 w-2.5 h-2.5 bg-yellow-500 rounded-full border-2 border-white dark:border-gray-800';
+    }
+    if (statusText) {
+        statusText.textContent = '接続中...';
+    }
 
     eventSource.onopen = () => {
-        statusEl.textContent = '接続済み';
-        statusEl.className = 'sse-status connected';
-        // sse-status connected で視覚的に表示されるため、アクティビティログは非表示
+        if (statusDot) {
+            statusDot.className = 'absolute top-1 right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white dark:border-gray-800';
+        }
+        if (statusText) {
+            statusText.textContent = '接続済み';
+        }
         // 接続成功したら再接続カウンターをリセット
         state.sseReconnectCount = 0;
     };
 
     eventSource.onerror = () => {
-        statusEl.textContent = '切断';
-        statusEl.className = 'sse-status disconnected';
-        // sse-status disconnected で視覚的に表示されるため、アクティビティログは非表示
+        if (statusDot) {
+            statusDot.className = 'absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-800';
+        }
+        if (statusText) {
+            statusText.textContent = '切断';
+        }
 
         // 指数バックオフで再接続（最大30秒）
         state.sseReconnectCount = (state.sseReconnectCount || 0) + 1;
@@ -774,11 +835,27 @@ function addActivityLog(type, message, fromSSE = false) {
     const logContainer = document.getElementById('activity-log');
     const time = new Date().toLocaleTimeString('ja-JP');
 
+    // アイコン設定
+    const iconMap = {
+        'upload': '<svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>',
+        'download': '<svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>',
+        'delete': '<svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>',
+        'error': '<svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+    };
+    const icon = iconMap[type] || iconMap['error'];
+
     const logItem = document.createElement('div');
-    logItem.className = `activity-item activity-type-${type}`;
+    logItem.className = 'flex items-start gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700';
     logItem.innerHTML = `
-        <span class="activity-time">[${time}]</span>
-        ${fromSSE ? '🔔 ' : ''}${message}
+        <div class="flex-shrink-0 mt-0.5">
+            ${icon}
+        </div>
+        <div class="flex-1 min-w-0">
+            <p class="text-sm text-gray-900 dark:text-gray-100 break-words">
+                ${fromSSE ? '<span class="inline-block w-2 h-2 bg-blue-500 rounded-full mr-1"></span>' : ''}${message}
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${time}</p>
+        </div>
     `;
 
     logContainer.insertBefore(logItem, logContainer.firstChild);
@@ -808,4 +885,163 @@ window.addEventListener('beforeunload', () => {
     if (state.eventSource) {
         state.eventSource.close();
     }
+    // 進行中のアップロードをキャンセル
+    Object.values(activeUploads).forEach(upload => {
+        if (upload.status === 'uploading') {
+            cancelUpload(upload.id);
+        }
+    });
 });
+
+// アップロード管理
+const activeUploads = {};
+let uploadIdCounter = 0;
+
+// アップロード追加（進行中リストに表示）
+function addActiveUpload(file, directory) {
+    const id = `upload_${uploadIdCounter++}`;
+    activeUploads[id] = {
+        id,
+        file,
+        directory,
+        status: 'uploading', // uploading, completed, failed, cancelled
+        progress: 0,
+        uploadId: null, // チャンクアップロードの場合
+        abortController: new AbortController()
+    };
+    renderActiveUploads();
+    updateUploadBadge();
+    return id;
+}
+
+// アップロード更新
+function updateUploadProgress(id, progress, status = 'uploading') {
+    if (activeUploads[id]) {
+        activeUploads[id].progress = progress;
+        activeUploads[id].status = status;
+        renderActiveUploads();
+        updateUploadBadge();
+    }
+}
+
+// アップロードをチャンクアップロードIDと紐付け
+function setUploadChunkId(id, uploadId) {
+    if (activeUploads[id]) {
+        activeUploads[id].uploadId = uploadId;
+    }
+}
+
+// アップロードキャンセル
+async function cancelUpload(id) {
+    const upload = activeUploads[id];
+    if (!upload) return;
+
+    // AbortControllerでリクエストキャンセル
+    upload.abortController.abort();
+
+    // チャンクアップロードの場合はサーバー側もキャンセル
+    if (upload.uploadId) {
+        try {
+            await fetch(`/files/chunk/cancel/${upload.uploadId}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+        } catch (err) {
+            console.error('チャンクアップロードのキャンセルに失敗:', err);
+        }
+    }
+
+    updateUploadProgress(id, upload.progress, 'cancelled');
+    if (window.toast) toast.info(`${upload.file.name} のアップロードをキャンセルしました`);
+}
+
+// 完了済みアップロードをクリア
+window.clearCompletedUploads = function() {
+    Object.keys(activeUploads).forEach(id => {
+        if (activeUploads[id].status !== 'uploading') {
+            delete activeUploads[id];
+        }
+    });
+    renderActiveUploads();
+    updateUploadBadge();
+};
+
+// 進行中アップロード一覧を描画
+function renderActiveUploads() {
+    const container = document.getElementById('active-uploads-list');
+    const uploads = Object.values(activeUploads);
+
+    if (uploads.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+                <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                <p class="text-sm">進行中のアップロードはありません</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = uploads.map(upload => {
+        const statusIcons = {
+            uploading: '⏳',
+            completed: '✅',
+            failed: '❌',
+            cancelled: '⛔'
+        };
+        const statusColors = {
+            uploading: 'text-blue-600',
+            completed: 'text-green-600',
+            failed: 'text-red-600',
+            cancelled: 'text-gray-600'
+        };
+
+        return `
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
+                <div class="flex items-start justify-between mb-2">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">${statusIcons[upload.status]}</span>
+                            <p class="text-sm font-semibold text-gray-800 dark:text-white truncate">${upload.file.name}</p>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            ${upload.directory} • ${formatFileSize(upload.file.size)}
+                        </p>
+                    </div>
+                    ${upload.status === 'uploading' ? `
+                        <button onclick="cancelUpload('${upload.id}')" class="ml-2 p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 rounded transition-colors" title="キャンセル">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    ` : ''}
+                </div>
+
+                ${upload.status === 'uploading' ? `
+                    <div class="relative w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 overflow-hidden">
+                        <div class="bg-discord-500 h-full rounded-full transition-all duration-300" style="width: ${upload.progress}%"></div>
+                    </div>
+                    <p class="text-xs text-gray-600 dark:text-gray-300 mt-1 text-right">${upload.progress}%</p>
+                ` : `
+                    <p class="text-xs ${statusColors[upload.status]} mt-1">
+                        ${upload.status === 'completed' ? '完了' : upload.status === 'failed' ? '失敗' : 'キャンセル済み'}
+                    </p>
+                `}
+            </div>
+        `;
+    }).join('');
+}
+
+// アップロード数バッジを更新
+function updateUploadBadge() {
+    const badge = document.getElementById('upload-count-badge');
+    const uploadingCount = Object.values(activeUploads).filter(u => u.status === 'uploading').length;
+
+    if (uploadingCount > 0) {
+        badge.textContent = uploadingCount;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
