@@ -9,7 +9,8 @@ const state = {
     viewMode: 'list', // 'list' or 'grid'
     sortBy: 'name-asc',
     searchQuery: '',
-    eventListenersInitialized: false
+    eventListenersInitialized: false,
+    selectedFiles: new Set() // 一括操作用の選択されたファイル
 };
 
 // ページ読み込み時
@@ -420,13 +421,50 @@ function renderFiles() {
     const viewMode = state.viewMode;
 
     if (viewMode === 'list') {
+        // 一括操作ツールバー（選択されたファイルがある場合のみ表示）
+        const bulkActionsBar = state.selectedFiles.size > 0 ? `
+            <div class="mb-4 p-4 bg-discord-500 dark:bg-discord-600 rounded-xl flex items-center justify-between text-white animate-fade-in">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span class="font-semibold">${state.selectedFiles.size}個のファイルを選択中</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="window.bulkDownload()" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors font-medium flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        一括ダウンロード
+                    </button>
+                    ${canDelete ? `
+                        <button onclick="window.bulkDelete()" class="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors font-medium flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                            一括削除
+                        </button>
+                    ` : ''}
+                    <button onclick="window.clearSelection()" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors font-medium">
+                        選択解除
+                    </button>
+                </div>
+            </div>
+        ` : '';
+
         // リスト表示 - デスクトップ: テーブル、モバイル: カード
-        container.innerHTML = `
+        container.innerHTML = bulkActionsBar + `
             <!-- デスクトップ用テーブル (md以上) -->
             <div class="hidden md:block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <table class="w-full">
                     <thead class="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-b border-gray-200 dark:border-gray-600">
                         <tr>
+                            <th class="px-6 py-4 w-12">
+                                <input type="checkbox"
+                                       onchange="window.toggleSelectAll(this.checked)"
+                                       ${state.selectedFiles.size === state.filteredFiles.length && state.filteredFiles.length > 0 ? 'checked' : ''}
+                                       class="w-4 h-4 text-discord-500 bg-gray-100 border-gray-300 rounded focus:ring-discord-500 focus:ring-2 cursor-pointer">
+                            </th>
                             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">ファイル名</th>
                             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">サイズ</th>
                             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">更新日時</th>
@@ -437,9 +475,17 @@ function renderFiles() {
                         ${state.filteredFiles.map(file => {
                             const filename = file.original_name || file.filename;
                             const iconConfig = window.getFileIconSVG ? window.getFileIconSVG(filename) : { svg: '', color: 'text-gray-500', bg: 'bg-gray-50' };
+                            const isSelected = state.selectedFiles.has(file.filename);
 
                             return `
-                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all group">
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all group ${isSelected ? 'bg-discord-50 dark:bg-discord-900/20' : ''}"
+                                oncontextmenu="window.showContextMenu(event, ${JSON.stringify(file).replace(/"/g, '&quot;')})">
+                                <td class="px-6 py-4">
+                                    <input type="checkbox"
+                                           ${isSelected ? 'checked' : ''}
+                                           onchange="window.toggleFileSelection('${file.filename}', this.checked)"
+                                           class="w-4 h-4 text-discord-500 bg-gray-100 border-gray-300 rounded focus:ring-discord-500 focus:ring-2 cursor-pointer">
+                                </td>
                                 <td class="px-6 py-4">
                                     <div class="flex items-center gap-3">
                                         <div class="flex-shrink-0 w-10 h-10 ${iconConfig.bg} rounded-lg flex items-center justify-center ${iconConfig.color} transition-transform group-hover:scale-110">
@@ -452,6 +498,12 @@ function renderFiles() {
                                 <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">${formatDate(file.modified_at)}</td>
                                 <td class="px-6 py-4 text-right">
                                     <div class="flex justify-end gap-2">
+                                        <button onclick="window.showFileDetail(${JSON.stringify(file).replace(/"/g, '&quot;')})" title="詳細"
+                                                class="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all transform hover:scale-110">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                        </button>
                                         <button onclick="downloadFile('${file.filename}')" title="ダウンロード"
                                                 class="p-2 text-discord-500 hover:bg-discord-50 dark:hover:bg-discord-900/20 rounded-lg transition-all transform hover:scale-110">
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -480,10 +532,17 @@ function renderFiles() {
                 ${state.filteredFiles.map(file => {
                     const filename = file.original_name || file.filename;
                     const iconConfig = window.getFileIconSVG ? window.getFileIconSVG(filename) : { svg: '', color: 'text-gray-500', bg: 'bg-gray-50' };
+                    const isSelected = state.selectedFiles.has(file.filename);
 
                     return `
-                    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:shadow-lg hover:border-discord-500 dark:hover:border-discord-500 transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl border ${isSelected ? 'border-discord-500 bg-discord-50 dark:bg-discord-900/20' : 'border-gray-200 dark:border-gray-700'} p-4 hover:shadow-lg hover:border-discord-500 dark:hover:border-discord-500 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                         oncontextmenu="window.showContextMenu(event, ${JSON.stringify(file).replace(/"/g, '&quot;')})">
                         <div class="flex items-start gap-3">
+                            <!-- チェックボックス -->
+                            <input type="checkbox"
+                                   ${isSelected ? 'checked' : ''}
+                                   onchange="window.toggleFileSelection('${file.filename}', this.checked)"
+                                   class="mt-1 w-5 h-5 text-discord-500 bg-gray-100 border-gray-300 rounded focus:ring-discord-500 focus:ring-2 cursor-pointer">
                             <!-- アイコン -->
                             <div class="flex-shrink-0 w-12 h-12 ${iconConfig.bg} rounded-xl flex items-center justify-center ${iconConfig.color}">
                                 ${iconConfig.svg}
@@ -511,6 +570,12 @@ function renderFiles() {
 
                         <!-- アクション -->
                         <div class="flex gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                            <button onclick="window.showFileDetail(${JSON.stringify(file).replace(/"/g, '&quot;')})"
+                                    class="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white font-semibold rounded-lg transition-all transform active:scale-95">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                            </button>
                             <button onclick="downloadFile('${file.filename}')"
                                     class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-discord-500 hover:bg-discord-600 active:bg-discord-700 text-white font-semibold rounded-lg transition-all transform active:scale-95">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -541,14 +606,16 @@ function renderFiles() {
                     const iconConfig = window.getFileIconSVG ? window.getFileIconSVG(filename) : { svg: '', color: 'text-gray-500', bg: 'bg-gray-50' };
 
                     return `
-                    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:shadow-xl hover:border-discord-500 dark:hover:border-discord-500 transition-all transform hover:scale-105 hover:-translate-y-1 active:scale-100 group cursor-pointer">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:shadow-xl hover:border-discord-500 dark:hover:border-discord-500 transition-all transform hover:scale-105 hover:-translate-y-1 active:scale-100 group cursor-pointer"
+                         onclick="window.showFileDetail(${JSON.stringify(file).replace(/"/g, '&quot;')})"
+                         oncontextmenu="window.showContextMenu(event, ${JSON.stringify(file).replace(/"/g, '&quot;')})">
                         <div class="flex flex-col items-center text-center">
                             <div class="w-20 h-20 ${iconConfig.bg} rounded-xl flex items-center justify-center ${iconConfig.color} mb-3 p-4 transition-transform group-hover:scale-110 group-hover:rotate-3">
                                 ${iconConfig.svg}
                             </div>
                             <div class="font-semibold text-sm text-gray-800 dark:text-white truncate w-full mb-1" title="${filename}">${filename}</div>
                             <div class="text-xs text-gray-500 dark:text-gray-400 mb-3">${formatFileSize(file.size)}</div>
-                            <div class="flex gap-2 w-full">
+                            <div class="flex gap-2 w-full" onclick="event.stopPropagation()">
                                 <button onclick="downloadFile('${file.filename}')"
                                         class="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-discord-500 hover:bg-discord-600 active:bg-discord-700 text-white text-xs font-semibold rounded-lg transition-all transform hover:scale-105 active:scale-95">
                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -970,6 +1037,8 @@ async function deleteFile(filename) {
 // プログレス表示
 function showProgress(show) {
     const progressDiv = document.getElementById('upload-progress');
+    if (!progressDiv) return; // 要素が存在しない場合は何もしない
+
     if (show) {
         progressDiv.classList.remove('hidden');
     } else {
@@ -979,8 +1048,13 @@ function showProgress(show) {
 }
 
 function setProgress(percent) {
-    document.getElementById('progress-fill').style.width = percent + '%';
-    document.getElementById('progress-text').textContent = percent + '%';
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+
+    if (!progressFill || !progressText) return; // 要素が存在しない場合は何もしない
+
+    progressFill.style.width = percent + '%';
+    progressText.textContent = percent + '%';
 }
 
 // Server-Sent Events接続
@@ -1117,6 +1191,141 @@ function formatDate(dateString) {
     const date = new Date(dateString);
     return date.toLocaleString('ja-JP');
 }
+
+// グローバルに公開（モーダルで使用）
+window.formatFileSize = formatFileSize;
+window.formatDate = formatDate;
+
+// ファイル詳細モーダル表示
+window.showFileDetail = function(file) {
+    // Alpine.jsのイベントをディスパッチしてモーダルを開く
+    window.dispatchEvent(new CustomEvent('open-file-detail', { detail: file }));
+};
+
+// 一括操作関数
+window.toggleFileSelection = function(filename, checked) {
+    if (checked) {
+        state.selectedFiles.add(filename);
+    } else {
+        state.selectedFiles.delete(filename);
+    }
+    renderFiles();
+};
+
+window.toggleSelectAll = function(checked) {
+    if (checked) {
+        state.filteredFiles.forEach(file => state.selectedFiles.add(file.filename));
+    } else {
+        state.selectedFiles.clear();
+    }
+    renderFiles();
+};
+
+window.clearSelection = function() {
+    state.selectedFiles.clear();
+    renderFiles();
+};
+
+// 一括ダウンロード
+window.bulkDownload = async function() {
+    if (state.selectedFiles.size === 0) {
+        if (window.toast) toast.warning('ファイルが選択されていません');
+        return;
+    }
+
+    const selectedArray = Array.from(state.selectedFiles);
+    if (window.toast) toast.info(`${selectedArray.length}個のファイルをダウンロード中...`);
+
+    for (const filename of selectedArray) {
+        await downloadFile(filename);
+        // 連続ダウンロードの間隔を少し開ける
+        await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (window.toast) toast.success('一括ダウンロード完了');
+};
+
+// 一括削除
+window.bulkDelete = async function() {
+    if (state.selectedFiles.size === 0) {
+        if (window.toast) toast.warning('ファイルが選択されていません');
+        return;
+    }
+
+    const selectedArray = Array.from(state.selectedFiles);
+    const confirmMessage = `${selectedArray.length}個のファイルを削除してもよろしいですか？\n\nこの操作は取り消せません。`;
+
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const filename of selectedArray) {
+        try {
+            const response = await fetch(`/files/${encodeURIComponent(state.selectedDirectory)}/${encodeURIComponent(filename)}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                successCount++;
+                state.selectedFiles.delete(filename);
+            } else {
+                failCount++;
+                console.error(`削除失敗: ${filename}`);
+            }
+        } catch (error) {
+            failCount++;
+            console.error(`削除エラー: ${filename}`, error);
+        }
+    }
+
+    // 再読み込み
+    await loadFiles(state.selectedDirectory);
+
+    if (window.toast) {
+        if (failCount === 0) {
+            toast.success(`${successCount}個のファイルを削除しました`);
+        } else {
+            toast.warning(`${successCount}個削除、${failCount}個失敗`);
+        }
+    }
+};
+
+// 右クリックコンテキストメニュー
+window.showContextMenu = function(event, file) {
+    event.preventDefault();
+
+    // コンテキストメニューのAlpine.jsインスタンスにアクセス
+    const contextMenu = document.getElementById('context-menu');
+    const alpineData = Alpine.$data(contextMenu);
+
+    // ファイル情報と位置を設定
+    alpineData.file = file;
+    alpineData.x = event.clientX;
+    alpineData.y = event.clientY;
+    alpineData.show = true;
+
+    // 画面外にはみ出さないように調整
+    setTimeout(() => {
+        const menuRect = contextMenu.getBoundingClientRect();
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+
+        if (alpineData.x + menuRect.width > windowWidth) {
+            alpineData.x = windowWidth - menuRect.width - 10;
+        }
+
+        if (alpineData.y + menuRect.height > windowHeight) {
+            alpineData.y = windowHeight - menuRect.height - 10;
+        }
+    }, 10);
+};
+
+// グローバルステートをウィンドウに公開（コンテキストメニューで使用）
+window.state = state;
 
 // ページ離脱時にSSE切断
 window.addEventListener('beforeunload', () => {
