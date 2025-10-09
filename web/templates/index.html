@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.ServiceName}}</title>
+    <title>{{.ServiceName}} - PC版</title>
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -80,7 +80,12 @@
             </div>
 
             <!-- ログイン後 - Box風レイアウト -->
-            <div id="app-section" class="hidden" x-data="{ sidebarOpen: window.innerWidth >= 1024, viewMode: 'list', uploadsOpen: false, activityOpen: false }">
+            <div id="app-section" class="hidden" x-data="{
+                sidebarOpen: false,
+                viewMode: 'list',
+                uploadsOpen: false,
+                activityOpen: false
+            }" x-init="sidebarOpen = window.innerWidth >= 1024">
             <div class="flex h-[calc(100vh-200px)] md:h-screen">
                 <!-- モバイルオーバーレイ -->
                 <div x-show="sidebarOpen && window.innerWidth < 1024"
@@ -94,12 +99,12 @@
                      class="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"></div>
 
                 <!-- サイドバー -->
-                <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0 lg:w-0'"
-                       class="fixed lg:relative z-40 w-64 lg:transition-all lg:duration-300 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 transition-transform duration-300">
-                    <div class="h-full flex flex-col">
+                <aside :class="sidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full lg:translate-x-0 w-0 lg:w-0'"
+                       class="fixed lg:relative z-40 lg:transition-all lg:duration-300 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 transition-all duration-300 overflow-hidden">
+                    <div class="h-full flex flex-col w-64">
                         <!-- サイドバーヘッダー -->
                         <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-                            <h2 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                            <h2 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2 whitespace-nowrap">
                                 <svg class="w-5 h-5 text-discord-500" fill="currentColor" viewBox="0 0 20 20">
                                     <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                                 </svg>
