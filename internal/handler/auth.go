@@ -14,20 +14,22 @@ import (
 
 	"fileserver/internal/config"
 	"fileserver/internal/models"
+	"fileserver/internal/storage"
 
 	"golang.org/x/oauth2"
 )
 
 // AuthHandler は認証関連のHTTPリクエストを処理します。
 type AuthHandler struct {
-	config      *config.Config
-	db          *sql.DB
-	oauthConfig *oauth2.Config
-	sseHandler  *SSEHandler
+	config         *config.Config
+	db             *sql.DB
+	oauthConfig    *oauth2.Config
+	sseHandler     *SSEHandler
+	storageManager *storage.Manager
 }
 
 // NewAuthHandler は新しいAuthHandlerインスタンスを作成します。
-func NewAuthHandler(cfg *config.Config, db *sql.DB) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, db *sql.DB, sm *storage.Manager) *AuthHandler {
 	oauthConfig := &oauth2.Config{
 		ClientID:     cfg.Discord.ClientID,
 		ClientSecret: cfg.Discord.ClientSecret,
@@ -40,9 +42,10 @@ func NewAuthHandler(cfg *config.Config, db *sql.DB) *AuthHandler {
 	}
 
 	return &AuthHandler{
-		config:      cfg,
-		db:          db,
-		oauthConfig: oauthConfig,
+		config:         cfg,
+		db:             db,
+		oauthConfig:    oauthConfig,
+		storageManager: sm,
 	}
 }
 
@@ -126,6 +129,16 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		slog.Error("ユーザー登録エラー", "error", upsertErr)
 		http.Error(w, "ユーザー登録に失敗しました", http.StatusInternalServerError)
 		return
+	}
+
+	// ユーザーディレクトリを作成（user_private ディレクトリの場合）
+	if h.storageManager != nil {
+		if ensureErr := h.storageManager.EnsureUserDirectory(discordUser.Username); ensureErr != nil {
+			slog.Error("ユーザーディレクトリ作成エラー", "error", ensureErr, "username", discordUser.Username)
+			// エラーが発生してもログインは継続（次回アップロード時に再試行される）
+		} else {
+			slog.Info("ユーザーディレクトリを作成しました", "username", discordUser.Username)
+		}
 	}
 
 	// セッション作成
