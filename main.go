@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,6 +21,21 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
+
+// isMobile はUser-Agentヘッダーからモバイルデバイスを判定します
+func isMobile(userAgent string) bool {
+	ua := strings.ToLower(userAgent)
+	mobileKeywords := []string{
+		"mobile", "android", "iphone", "ipad", "ipod",
+		"blackberry", "windows phone", "webos",
+	}
+	for _, keyword := range mobileKeywords {
+		if strings.Contains(ua, keyword) {
+			return true
+		}
+	}
+	return false
+}
 
 func main() {
 	// ロガー初期化
@@ -88,9 +104,19 @@ func main() {
 
 	// ルートパス（Webインターフェース）
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		tmpl, err := template.ParseFiles("web/templates/index.html")
+		// Vary: User-Agentヘッダーを追加（SEO対策）
+		w.Header().Set("Vary", "User-Agent")
+
+		// User-Agentを判定してテンプレートを切り替え
+		userAgent := r.Header.Get("User-Agent")
+		templateFile := "web/templates/index.html"
+		if isMobile(userAgent) {
+			templateFile = "web/templates/index_mobile.html"
+		}
+
+		tmpl, err := template.ParseFiles(templateFile)
 		if err != nil {
-			slog.Error("テンプレートの読み込みに失敗しました", "error", err)
+			slog.Error("テンプレートの読み込みに失敗しました", "error", err, "template", templateFile)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
