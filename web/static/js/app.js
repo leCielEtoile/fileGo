@@ -66,10 +66,58 @@ function showAppSection() {
     // イベントリスナー設定（DOM表示後）
     setupEventListeners();
 
+    // 初期状態のウェルカム画面を表示
+    showWelcomeScreen();
+
     // ログイン成功トースト
     if (window.toast) {
         toast.success('ログインしました');
     }
+}
+
+// ウェルカム画面表示
+function showWelcomeScreen() {
+    const container = document.getElementById('files-list');
+    container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-20 px-4 animate-fade-in">
+            <div class="w-32 h-32 bg-gradient-to-br from-discord-500 to-purple-600 rounded-full flex items-center justify-center mb-8 shadow-2xl animate-bounce">
+                <svg class="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                </svg>
+            </div>
+            <h2 class="text-3xl font-bold text-gray-800 dark:text-white mb-4">ようこそ！</h2>
+            <p class="text-gray-600 dark:text-gray-400 text-center mb-8 max-w-md">
+                左のサイドバーからフォルダを選択して、ファイルの管理を始めましょう
+            </p>
+            <div class="flex flex-col sm:flex-row gap-4">
+                <div class="flex items-center gap-3 px-6 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <svg class="w-6 h-6 text-discord-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                    </svg>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-800 dark:text-white">フォルダを選択</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">サイドバーから選ぶ</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 px-6 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-800 dark:text-white">ファイルアップロード</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">ドラッグ&ドロップ対応</div>
+                    </div>
+                </div>
+            </div>
+            <!-- モバイル用サイドバー開くボタン -->
+            <button onclick="document.querySelector('[\\@click*=sidebarOpen]').click()" class="mt-8 lg:hidden px-6 py-3 bg-discord-500 hover:bg-discord-600 text-white font-semibold rounded-xl transition-all transform hover:scale-105 flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+                フォルダを開く
+            </button>
+        </div>
+    `;
 }
 
 // ディレクトリ一覧読み込み（Skeleton loading対応）
@@ -122,7 +170,17 @@ function renderDirectories() {
     const container = document.getElementById('directory-list');
 
     if (state.directories.length === 0) {
-        container.innerHTML = '<div class="p-4 text-center text-sm text-gray-500 dark:text-gray-400">アクセス可能なフォルダがありません</div>';
+        container.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-8 px-4 text-center">
+                <div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-8 h-8 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                    </svg>
+                </div>
+                <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">フォルダがありません</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">管理者に権限を依頼してください</p>
+            </div>
+        `;
         return;
     }
 
