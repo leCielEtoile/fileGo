@@ -19,19 +19,19 @@ env:
 
 jobs:
   lint:
-    name: Lint
+    name: 🔍 コード品質チェック
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: 📥 コードをチェックアウト
         uses: actions/checkout@v5
 
-      - name: Set up Go
+      - name: 🐹 Go環境をセットアップ
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Run golangci-lint
+      - name: ✨ golangci-lintを実行
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.2.0
@@ -41,25 +41,25 @@ jobs:
           skip-build-cache: false
 
   test:
-    name: Test
+    name: 🧪 テスト実行
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: 📥 コードをチェックアウト
         uses: actions/checkout@v5
 
-      - name: Set up Go
+      - name: 🐹 Go環境をセットアップ
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Run tests
+      - name: 🧪 テストを実行
         run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
-      - name: Generate coverage report
+      - name: 📊 カバレッジレポートを生成
         run: go tool cover -html=coverage.out -o coverage.html
 
-      - name: Upload coverage artifacts
+      - name: 📤 カバレッジレポートをアップロード
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -69,7 +69,7 @@ jobs:
           retention-days: 30
 
   build:
-    name: Build Binary (${{ matrix.goos }}/${{ matrix.goarch }})
+    name: 🔨 バイナリビルド (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     needs: [lint, test]
     if: github.event_name != 'pull_request'
@@ -81,16 +81,16 @@ jobs:
           - goos: windows
             goarch: arm64
     steps:
-      - name: Checkout code
+      - name: 📥 コードをチェックアウト
         uses: actions/checkout@v5
 
-      - name: Set up Go
+      - name: 🐹 Go環境をセットアップ
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Build binary
+      - name: 🔨 バイナリをビルド
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -98,7 +98,7 @@ jobs:
         run: |
           go build -v -ldflags="-s -w" -o fileserver-${{ matrix.goos }}-${{ matrix.goarch }} .
 
-      - name: Upload build artifacts
+      - name: 📤 ビルド成果物をアップロード
         uses: actions/upload-artifact@v4
         with:
           name: fileserver-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -106,19 +106,19 @@ jobs:
           retention-days: 7
 
   security-scan:
-    name: Security Scan
+    name: 🔒 セキュリティスキャン
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: 📥 コードをチェックアウト
         uses: actions/checkout@v5
 
-      - name: Run Gosec Security Scanner
+      - name: 🔒 Gosecセキュリティスキャナーを実行
         uses: securego/gosec@master
         with:
           args: '-no-fail -fmt json -out gosec-results.json ./...'
         continue-on-error: true
 
-      - name: Upload Gosec results
+      - name: 📤 Gosec結果をアップロード
         uses: actions/upload-artifact@v4
         with:
           name: gosec-results
@@ -127,7 +127,7 @@ jobs:
         continue-on-error: true
 
   docker:
-    name: Docker Build and Push (${{ matrix.platform }})
+    name: 🐳 Dockerビルド & プッシュ (${{ matrix.platform }})
     runs-on: ubuntu-latest
     needs: [lint, test]
     strategy:
@@ -145,21 +145,21 @@ jobs:
       security-events: write
 
     steps:
-      - name: Skip ARM64 on PR
+      - name: ⏭️ PR時はARM64をスキップ
         if: github.event_name == 'pull_request' && matrix.skip_on_pr
-        run: echo "Skipping ARM64 build for PR" && exit 0
+        run: echo "PR時はARM64ビルドをスキップします" && exit 0
 
-      - name: Checkout code
+      - name: 📥 コードをチェックアウト
         uses: actions/checkout@v5
 
-      - name: Set up QEMU
+      - name: 🔧 QEMUをセットアップ
         if: matrix.platform == 'linux/arm64'
         uses: docker/setup-qemu-action@v3
 
-      - name: Set up Docker Buildx
+      - name: 🔧 Docker Buildxをセットアップ
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: 🔐 GitHub Container Registryにログイン
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
@@ -167,7 +167,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: 📝 メタデータを抽出
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -183,7 +183,7 @@ jobs:
           flavor: |
             suffix=-${{ matrix.platform_tag }}
 
-      - name: Build and push Docker image
+      - name: 🐳 Dockerイメージをビルド & プッシュ
         id: build-and-push
         uses: docker/build-push-action@v6
         with:
@@ -201,7 +201,7 @@ jobs:
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
             VCS_REF=${{ github.sha }}
 
-      - name: Upload Docker image artifact
+      - name: 📤 Dockerイメージをアップロード
         if: github.event_name == 'pull_request' && matrix.platform == 'linux/amd64'
         uses: actions/upload-artifact@v4
         with:
@@ -209,7 +209,7 @@ jobs:
           path: /tmp/image.tar
           retention-days: 1
 
-      - name: Run Trivy vulnerability scanner on Docker image
+      - name: 🔍 Trivyで脆弱性スキャン
         if: matrix.platform == 'linux/amd64'
         uses: aquasecurity/trivy-action@master
         with:
@@ -218,7 +218,7 @@ jobs:
           output: 'trivy-results.sarif'
         continue-on-error: true
 
-      - name: Upload Trivy results to GitHub Security
+      - name: 📤 Trivy結果をGitHub Securityにアップロード
         if: matrix.platform == 'linux/amd64'
         uses: github/codeql-action/upload-sarif@v4
         with:
@@ -226,7 +226,7 @@ jobs:
         continue-on-error: true
 
   docker-manifest:
-    name: Create Docker Manifest
+    name: 📦 Dockerマニフェスト作成
     runs-on: ubuntu-latest
     needs: [docker]
     if: github.event_name != 'pull_request'
@@ -234,14 +234,14 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Log in to GitHub Container Registry
+      - name: 🔐 GitHub Container Registryにログイン
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: 📝 メタデータを抽出
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -254,7 +254,7 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Create and push multi-platform manifest
+      - name: 📦 マルチプラットフォームマニフェストを作成 & プッシュ
         run: |
           TAGS="${{ steps.meta.outputs.tags }}"
           for tag in $TAGS; do
@@ -263,7 +263,7 @@ jobs:
               ${tag}-arm64
           done
 
-      - name: Generate SBOM
+      - name: 📋 SBOM（ソフトウェア部品表）を生成
         uses: anchore/sbom-action@v0
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
@@ -271,7 +271,7 @@ jobs:
           output-file: sbom.spdx.json
         continue-on-error: true
 
-      - name: Upload SBOM
+      - name: 📤 SBOMをアップロード
         uses: actions/upload-artifact@v4
         with:
           name: sbom
@@ -280,17 +280,17 @@ jobs:
         continue-on-error: true
 
   docker-compose-test:
-    name: Docker Compose Test
+    name: 🧪 Docker Composeテスト
     runs-on: ubuntu-latest
     needs: [docker]
     steps:
-      - name: Checkout code
+      - name: 📥 コードをチェックアウト
         uses: actions/checkout@v5
 
-      - name: Set up Docker Buildx
+      - name: 🔧 Docker Buildxをセットアップ
         uses: docker/setup-buildx-action@v3
 
-      - name: Download Docker image from previous job
+      - name: 📥 前ジョブからDockerイメージをダウンロード
         uses: actions/download-artifact@v5
         if: github.event_name == 'pull_request'
         with:
@@ -298,46 +298,46 @@ jobs:
           path: /tmp
         continue-on-error: true
 
-      - name: Load Docker image
+      - name: 📦 Dockerイメージをロード
         if: github.event_name == 'pull_request'
-        run: docker load -i /tmp/image.tar || echo "Image not found, will build locally"
+        run: docker load -i /tmp/image.tar || echo "イメージが見つかりません。ローカルでビルドします"
         continue-on-error: true
 
-      - name: Create config directory
+      - name: 📁 設定ディレクトリを作成
         run: |
           mkdir -p config data/uploads logs
           cp config.yaml.example config.yaml
 
-      - name: Pull image from registry (non-PR)
+      - name: 📥 レジストリからイメージをプル (非PR時)
         if: github.event_name != 'pull_request'
-        run: docker compose pull || echo "Failed to pull, will build locally"
+        run: docker compose pull || echo "プル失敗。ローカルでビルドします"
         continue-on-error: true
 
-      - name: Start services
+      - name: 🚀 サービスを起動
         run: docker compose up -d --build
 
-      - name: Wait for container to start
+      - name: ⏳ コンテナ起動を待機
         run: sleep 10
 
-      - name: Show initial logs
+      - name: 📋 初期ログを表示
         run: docker compose logs
 
-      - name: Check container status
+      - name: ✅ コンテナステータスを確認
         run: docker compose ps
 
-      - name: Wait for service to be ready
+      - name: ⏳ サービスが準備完了するまで待機
         run: |
           timeout 30 sh -c 'until curl -f http://localhost:8080/health; do sleep 2; done'
         continue-on-error: true
 
-      - name: Check health endpoint
+      - name: 🩺 ヘルスチェックエンドポイントを確認
         run: curl -v http://localhost:8080/health
         continue-on-error: true
 
-      - name: Show final logs
+      - name: 📋 最終ログを表示
         if: always()
         run: docker compose logs
 
-      - name: Stop services
+      - name: 🛑 サービスを停止
         if: always()
         run: docker compose down
