@@ -241,7 +241,10 @@ function updateBreadcrumb() {
 async function selectDirectory(path) {
     state.selectedDirectory = path;
     state.searchQuery = ''; // 検索クリア
-    document.getElementById('search-input').value = '';
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.value = '';
+    }
     renderDirectories();
     updateBreadcrumb();
     await loadFiles(path);
