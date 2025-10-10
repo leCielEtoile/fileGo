@@ -46,8 +46,6 @@ type DatabaseConfig struct {
 // StorageConfig はストレージ設定を表します。
 type StorageConfig struct {
 	UploadPath           string            `yaml:"upload_path"`
-	AdminRoleID          string            `yaml:"admin_role_id"`
-	Directories          []DirectoryConfig `yaml:"directories"`
 	MaxFileSize          int64             `yaml:"max_file_size"`
 	ChunkSize            int64             `yaml:"chunk_size"`
 	MaxChunkFileSize     int64             `yaml:"max_chunk_file_size"`
@@ -55,6 +53,8 @@ type StorageConfig struct {
 	CleanupInterval      time.Duration     `yaml:"cleanup_interval"`
 	MaxConcurrentUploads int               `yaml:"max_concurrent_uploads"`
 	ChunkUploadEnabled   bool              `yaml:"chunk_upload_enabled"`
+	AdminRoleID          string            `yaml:"admin_role_id"`
+	Directories          []DirectoryConfig `yaml:"directories"`
 }
 
 // DirectoryConfig はディレクトリ設定を表します。
@@ -163,6 +163,9 @@ func overrideFromEnv(cfg *Config) {
 		if val, err := time.ParseDuration(cleanupInterval); err == nil {
 			cfg.Storage.CleanupInterval = val
 		}
+	}
+	if adminRoleID := os.Getenv("STORAGE_ADMIN_ROLE_ID"); adminRoleID != "" {
+		cfg.Storage.AdminRoleID = adminRoleID
 	}
 }
 
