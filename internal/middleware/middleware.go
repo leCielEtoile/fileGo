@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"fileserver/internal/config"
+	"fileserver/internal/discord"
 	"fileserver/internal/models"
 )
 
@@ -172,6 +173,47 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB) func(http.Handler) http.Hand
 			// Add user info to context
 			ctx := context.WithValue(r.Context(), models.UserContextKey, &user)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// AdminMiddleware は管理者権限チェックミドルウェアです。
+func AdminMiddleware(cfg *config.Config, discordClient *discord.Client) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// コンテキストからユーザー情報を取得
+			user, ok := r.Context().Value(models.UserContextKey).(*models.User)
+			if !ok {
+				slog.Warn("管理者チェック: ユーザー情報が見つかりません")
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+
+			// Discordから最新のロール情報を取得
+			member, err := discordClient.GetGuildMember(cfg.Discord.GuildID, user.DiscordID)
+			if err != nil {
+				slog.Error("管理者チェック: Discordメンバー情報取得エラー", "error", err, "user_id", user.DiscordID)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
+			}
+
+			// 管理者ロールを持っているかチェック
+			isAdmin := false
+			for _, roleID := range member.Roles {
+				if roleID == cfg.Storage.AdminRoleID {
+					isAdmin = true
+					break
+				}
+			}
+
+			if !isAdmin {
+				slog.Warn("管理者権限がありません", "user_id", user.DiscordID, "username", user.Username)
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+
+			slog.Debug("管理者権限確認成功", "user_id", user.DiscordID)
+			next.ServeHTTP(w, r)
 		})
 	}
 }

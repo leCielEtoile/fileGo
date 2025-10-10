@@ -86,6 +86,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(cfg, db, storageManager)
 	fileHandler := handler.NewFileHandler(cfg, storageManager, uploadManager, permissionChecker)
 	chunkHandler := handler.NewChunkHandler(storageManager, uploadManager, permissionChecker)
+	adminHandler := handler.NewAdminHandler(cfg, uploadManager)
 
 	// SSEハンドラーをファイルハンドラーに注入
 	fileHandler.SetSSEHandler(sseHandler)
@@ -167,6 +168,15 @@ func main() {
 		r.Get("/files/chunk/status/{upload_id}", chunkHandler.GetChunkStatus)
 		r.Post("/files/chunk/complete/{upload_id}", chunkHandler.CompleteChunkUpload)
 		r.Delete("/files/chunk/cancel/{upload_id}", chunkHandler.CancelChunkUpload)
+
+		// 管理者専用エンドポイント
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.AdminMiddleware(cfg, discordClient))
+
+			r.Get("/admin", adminHandler.AdminPage)
+			r.Get("/api/admin/uploads", adminHandler.GetUploadSessions)
+			r.Get("/api/admin/stats", adminHandler.GetUploadStats)
+		})
 	})
 
 	// HTTPサーバー起動
