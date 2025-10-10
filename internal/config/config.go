@@ -2,6 +2,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,9 +17,9 @@ import (
 
 // Config はアプリケーション設定を表します。
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
 	Discord  DiscordConfig  `yaml:"discord"`
 	Database DatabaseConfig `yaml:"database"`
+	Server   ServerConfig   `yaml:"server"`
 	Storage  StorageConfig  `yaml:"storage"`
 }
 
@@ -49,6 +50,8 @@ type DatabaseConfig struct {
 // StorageConfig はストレージ設定を表します。
 type StorageConfig struct {
 	UploadPath           string            `yaml:"upload_path"`
+	AdminRoleID          string            `yaml:"admin_role_id"`
+	Directories          []DirectoryConfig `yaml:"directories"`
 	MaxFileSize          int64             `yaml:"max_file_size"`
 	ChunkSize            int64             `yaml:"chunk_size"`
 	MaxChunkFileSize     int64             `yaml:"max_chunk_file_size"`
@@ -56,8 +59,6 @@ type StorageConfig struct {
 	CleanupInterval      time.Duration     `yaml:"cleanup_interval"`
 	MaxConcurrentUploads int               `yaml:"max_concurrent_uploads"`
 	ChunkUploadEnabled   bool              `yaml:"chunk_upload_enabled"`
-	AdminRoleID          string            `yaml:"admin_role_id"`
-	Directories          []DirectoryConfig `yaml:"directories"`
 }
 
 // DirectoryConfig はディレクトリ設定を表します。
@@ -81,6 +82,7 @@ func Load(path string) (*Config, error) {
 				return nil, fmt.Errorf("設定ファイルが見つかりません。config.yaml.exampleからのコピーにも失敗しました: %w", copyErr)
 			}
 			// コピー後に再度読み込み
+			// #nosec G304 - Configuration file path is intentionally provided by the application
 			data, err = os.ReadFile(path)
 			if err != nil {
 				return nil, fmt.Errorf("コピーした設定ファイルの読み込みに失敗しました: %w", err)
@@ -147,7 +149,7 @@ func downloadConfigFromGitHub() ([]byte, error) {
 	// Git リモートURLを取得
 	remoteURL, branch, err := getGitRemoteInfo()
 	if err != nil {
-		return nil, fmt.Errorf("Gitリモート情報の取得に失敗しました: %w", err)
+		return nil, fmt.Errorf("git リモート情報の取得に失敗しました: %w", err)
 	}
 
 	// GitHub URLをraw.githubusercontent.com形式に変換
@@ -158,11 +160,21 @@ func downloadConfigFromGitHub() ([]byte, error) {
 
 	// HTTPリクエストでダウンロード
 	// #nosec G107 - URL is constructed from git remote, not user input
-	resp, err := http.Get(rawURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("GitHubからのダウンロードリクエストの作成に失敗しました: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("GitHubからのダウンロードに失敗しました: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close() //nolint:errcheck // Body close error is intentionally ignored
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHubからのダウンロードに失敗しました。ステータスコード: %d", resp.StatusCode)
@@ -178,8 +190,10 @@ func downloadConfigFromGitHub() ([]byte, error) {
 
 // getGitRemoteInfo はGitリポジトリのリモートURLとブランチを取得します。
 func getGitRemoteInfo() (string, string, error) {
+	ctx := context.Background()
+
 	// リモートURL取得
-	cmd := exec.Command("git", "config", "--get", "remote.origin.url")
+	cmd := exec.CommandContext(ctx, "git", "config", "--get", "remote.origin.url")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", "", fmt.Errorf("git remote URLの取得に失敗しました: %w", err)
@@ -187,7 +201,7 @@ func getGitRemoteInfo() (string, string, error) {
 	remoteURL := strings.TrimSpace(string(output))
 
 	// ブランチ取得
-	cmd = exec.Command("git", "branch", "--show-current")
+	cmd = exec.CommandContext(ctx, "git", "branch", "--show-current")
 	output, err = cmd.Output()
 	if err != nil {
 		// ブランチ取得に失敗した場合はmainをデフォルトにする
