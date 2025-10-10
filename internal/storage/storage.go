@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -212,7 +213,8 @@ func (m *Manager) SaveFileMetadata(directory, filename, uploaderID, uploaderName
 			created_at = CURRENT_TIMESTAMP
 	`
 
-	_, err = m.db.Exec(query, directory, filename, uploaderID, uploaderName, hash)
+	ctx := context.Background()
+	_, err = m.db.ExecContext(ctx, query, directory, filename, uploaderID, uploaderName, hash)
 	if err != nil {
 		return fmt.Errorf("メタデータの保存に失敗しました: %w", err)
 	}
@@ -227,7 +229,8 @@ func (m *Manager) GetFileMetadata(directory, filename string) (uploader string, 
 	}
 
 	query := `SELECT uploader_name, hash FROM file_metadata WHERE directory = ? AND filename = ?`
-	err = m.db.QueryRow(query, directory, filename).Scan(&uploader, &hash)
+	ctx := context.Background()
+	err = m.db.QueryRowContext(ctx, query, directory, filename).Scan(&uploader, &hash)
 	if err == sql.ErrNoRows {
 		return "", "", nil // データが存在しない場合はエラーではなく空文字列を返す
 	}
@@ -247,7 +250,11 @@ func (m *Manager) calculateFileHash(directory, filename string) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("ファイルのオープンに失敗しました: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Error("ファイルのクローズに失敗しました", "error", err)
+		}
+	}()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {
