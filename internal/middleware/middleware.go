@@ -190,16 +190,16 @@ func AdminMiddleware(cfg *config.Config, discordClient *discord.Client) func(htt
 			}
 
 			// Discordから最新のロール情報を取得
-			member, err := discordClient.GetGuildMember(cfg.Discord.GuildID, user.DiscordID)
+			roles, err := discordClient.GetMemberRoles(user.DiscordID)
 			if err != nil {
-				slog.Error("管理者チェック: Discordメンバー情報取得エラー", "error", err, "user_id", user.DiscordID)
+				slog.Error("管理者チェック: Discordロール情報取得エラー", "error", err, "user_id", user.DiscordID)
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
 
 			// 管理者ロールを持っているかチェック
 			isAdmin := false
-			for _, roleID := range member.Roles {
+			for _, roleID := range roles {
 				if roleID == cfg.Storage.AdminRoleID {
 					isAdmin = true
 					break
