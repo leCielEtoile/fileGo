@@ -3,7 +3,10 @@ package config
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -66,11 +69,25 @@ type DirectoryConfig struct {
 }
 
 // Load は設定ファイルを読み込み、環境変数で上書きします。
+// 設定ファイルが存在しない場合、config.yaml.exampleからコピーを試みます。
 func Load(path string) (*Config, error) {
+	// 設定ファイルが存在するか確認
 	// #nosec G304 - Configuration file path is intentionally provided by the application
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("設定ファイルの読み込みに失敗しました: %w", err)
+		// ファイルが存在しない場合、config.yaml.exampleからコピーを試みる
+		if os.IsNotExist(err) {
+			if copyErr := copyConfigFromExample(path); copyErr != nil {
+				return nil, fmt.Errorf("設定ファイルが見つかりません。config.yaml.exampleからのコピーにも失敗しました: %w", copyErr)
+			}
+			// コピー後に再度読み込み
+			data, err = os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("コピーした設定ファイルの読み込みに失敗しました: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("設定ファイルの読み込みに失敗しました: %w", err)
+		}
 	}
 
 	var cfg Config
@@ -82,6 +99,138 @@ func Load(path string) (*Config, error) {
 	overrideFromEnv(&cfg)
 
 	return &cfg, nil
+}
+
+// copyConfigFromExample はconfig.yaml.exampleを指定されたパスにコピーします。
+// まずローカルのファイルを探し、見つからない場合はGitHubリポジトリからダウンロードします。
+func copyConfigFromExample(destPath string) error {
+	// 1. ローカルのconfig.yaml.exampleを探す
+	examplePaths := []string{
+		"config.yaml.example",
+		"../config.yaml.example",
+		"../../config.yaml.example",
+	}
+
+	var exampleData []byte
+	foundExample := false
+
+	for _, examplePath := range examplePaths {
+		// #nosec G304 - Configuration file path is intentionally provided by the application
+		data, err := os.ReadFile(examplePath)
+		if err == nil {
+			exampleData = data
+			foundExample = true
+			break
+		}
+	}
+
+	// 2. ローカルに見つからない場合、GitHubからダウンロード
+	if !foundExample {
+		data, err := downloadConfigFromGitHub()
+		if err != nil {
+			return fmt.Errorf("config.yaml.exampleが見つかりません。GitHubからのダウンロードにも失敗しました: %w", err)
+		}
+		exampleData = data
+	}
+
+	// 3. 設定ファイルを書き込み
+	// #nosec G306 - Configuration file permissions are intentionally set
+	if err := os.WriteFile(destPath, exampleData, 0644); err != nil {
+		return fmt.Errorf("設定ファイルの書き込みに失敗しました: %w", err)
+	}
+
+	return nil
+}
+
+// downloadConfigFromGitHub はGitHubリポジトリからconfig.yaml.exampleをダウンロードします。
+func downloadConfigFromGitHub() ([]byte, error) {
+	// Git リモートURLを取得
+	remoteURL, branch, err := getGitRemoteInfo()
+	if err != nil {
+		return nil, fmt.Errorf("Gitリモート情報の取得に失敗しました: %w", err)
+	}
+
+	// GitHub URLをraw.githubusercontent.com形式に変換
+	rawURL := convertToRawGitHubURL(remoteURL, branch)
+	if rawURL == "" {
+		return nil, fmt.Errorf("GitHubのraw URLへの変換に失敗しました。リポジトリURL: %s", remoteURL)
+	}
+
+	// HTTPリクエストでダウンロード
+	// #nosec G107 - URL is constructed from git remote, not user input
+	resp, err := http.Get(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("GitHubからのダウンロードに失敗しました: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHubからのダウンロードに失敗しました。ステータスコード: %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("レスポンスの読み込みに失敗しました: %w", err)
+	}
+
+	return data, nil
+}
+
+// getGitRemoteInfo はGitリポジトリのリモートURLとブランチを取得します。
+func getGitRemoteInfo() (string, string, error) {
+	// リモートURL取得
+	cmd := exec.Command("git", "config", "--get", "remote.origin.url")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("git remote URLの取得に失敗しました: %w", err)
+	}
+	remoteURL := strings.TrimSpace(string(output))
+
+	// ブランチ取得
+	cmd = exec.Command("git", "branch", "--show-current")
+	output, err = cmd.Output()
+	if err != nil {
+		// ブランチ取得に失敗した場合はmainをデフォルトにする
+		return remoteURL, "main", nil
+	}
+	branch := strings.TrimSpace(string(output))
+	if branch == "" {
+		branch = "main"
+	}
+
+	return remoteURL, branch, nil
+}
+
+// convertToRawGitHubURL はGitHubのリポジトリURLをraw.githubusercontent.com形式に変換します。
+func convertToRawGitHubURL(repoURL, branch string) string {
+	// https://github.com/user/repo.git -> https://raw.githubusercontent.com/user/repo/branch/config.yaml.example
+	// git@github.com:user/repo.git -> https://raw.githubusercontent.com/user/repo/branch/config.yaml.example
+
+	var owner, repo string
+
+	if strings.HasPrefix(repoURL, "https://github.com/") {
+		// HTTPS形式
+		path := strings.TrimPrefix(repoURL, "https://github.com/")
+		path = strings.TrimSuffix(path, ".git")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) != 2 {
+			return ""
+		}
+		owner, repo = parts[0], parts[1]
+	} else if strings.HasPrefix(repoURL, "git@github.com:") {
+		// SSH形式
+		path := strings.TrimPrefix(repoURL, "git@github.com:")
+		path = strings.TrimSuffix(path, ".git")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) != 2 {
+			return ""
+		}
+		owner, repo = parts[0], parts[1]
+	} else {
+		return ""
+	}
+
+	return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/config.yaml.example", owner, repo, branch)
 }
 
 // overrideFromEnv 環境変数で設定を上書きする
