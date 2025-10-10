@@ -54,9 +54,9 @@ type FileInfo struct {
 	ModifiedAt   time.Time `json:"modified_at"`   // 24 bytes (wall: uint64, ext: int64, loc: *Location)
 	Filename     string    `json:"filename"`      // 16 bytes
 	OriginalName string    `json:"original_name"` // 16 bytes
-	Size         int64     `json:"size"`          // 8 bytes
 	Uploader     string    `json:"uploader"`      // 16 bytes
 	Hash         string    `json:"hash"`          // 16 bytes
+	Size         int64     `json:"size"`          // 8 bytes
 }
 
 type UploadSession struct {

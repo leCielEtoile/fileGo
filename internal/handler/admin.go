@@ -50,14 +50,14 @@ type UploadSessionInfo struct {
 	UserID         string  `json:"user_id"`
 	Filename       string  `json:"filename"`
 	Directory      string  `json:"directory"`
-	TotalSize      int64   `json:"total_size"`
-	ChunkSize      int64   `json:"chunk_size"`
-	TotalChunks    int     `json:"total_chunks"`
-	UploadedChunks int     `json:"uploaded_chunks"`
-	Progress       float64 `json:"progress"`
 	CreatedAt      string  `json:"created_at"`
 	UpdatedAt      string  `json:"updated_at"`
 	ExpiresAt      string  `json:"expires_at"`
+	TotalSize      int64   `json:"total_size"`
+	ChunkSize      int64   `json:"chunk_size"`
+	Progress       float64 `json:"progress"`
+	TotalChunks    int     `json:"total_chunks"`
+	UploadedChunks int     `json:"uploaded_chunks"`
 }
 
 // GetUploadSessions は現在進行中のアップロードセッション一覧を返します。
