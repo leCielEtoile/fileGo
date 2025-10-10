@@ -1,44 +1,106 @@
+# ========================================
+# サーバー設定
+# ========================================
 server:
+  # サーバーのポート番号
   port: "8080"
-  service_name: "Discord File Server"
-  behind_proxy: true
-  secure_cookie: true  # HTTPSの場合はtrue、HTTP開発環境ではfalse
-  trusted_proxies:
-    - "172.16.0.0/12"
-    - "10.0.0.0/8"
-    - "192.168.0.0/16"
 
+  # サービスの表示名（Webページのタイトルなどに使用）
+  service_name: "Discord File Server"
+
+  # リバースプロキシ（nginx等）の背後で動作する場合はtrue
+  behind_proxy: true
+
+  # Cookieのセキュア属性（HTTPS環境ではtrue、HTTP開発環境ではfalse）
+  secure_cookie: true
+
+  # 信頼するプロキシのIPアドレス範囲（CIDR表記）
+  # behind_proxyがtrueの場合に使用されます
+  trusted_proxies:
+    - "172.16.0.0/12"   # Dockerのデフォルトネットワーク
+    - "10.0.0.0/8"      # プライベートネットワーク
+    - "192.168.0.0/16"  # ローカルネットワーク
+
+# ========================================
+# Discord設定
+# ========================================
 discord:
+  # Discord Botのトークン（Discord Developer Portalから取得）
   bot_token: "YOUR_BOT_TOKEN"
+
+  # Discord ApplicationのClient ID
   client_id: "YOUR_CLIENT_ID"
+
+  # Discord ApplicationのClient Secret
   client_secret: "YOUR_CLIENT_SECRET"
+
+  # 対象のDiscordサーバー（ギルド）のID
   guild_id: "YOUR_GUILD_ID"
+
+  # OAuth2認証後のリダイレクトURL
+  # Discord Developer Portalの「OAuth2 > Redirects」に登録する必要があります
   redirect_url: "https://yourdomain.com/auth/callback"
 
+# ========================================
+# データベース設定
+# ========================================
 database:
+  # SQLiteデータベースファイルのパス
   path: "/root/config/fileserver.db"
+
+  # 最大接続数
   max_connections: 10
 
+# ========================================
+# ストレージ設定
+# ========================================
 storage:
+  # アップロードされたファイルの保存先ディレクトリ
   upload_path: "/root/data/uploads"
+
+  # 通常アップロードの最大ファイルサイズ（バイト単位）
   max_file_size: 104857600  # 100MB
+
+  # チャンクアップロードの有効化（大容量ファイルを分割してアップロード）
   chunk_upload_enabled: true
+
+  # チャンクアップロード時の1チャンクあたりのサイズ（バイト単位）
   chunk_size: 20971520  # 20MB
+
+  # チャンクアップロードで扱える最大ファイルサイズ（バイト単位）
   max_chunk_file_size: 536870912000  # 500GB
+
+  # 同時アップロード可能な数（チャンクアップロード）
   max_concurrent_uploads: 3
+
+  # アップロードセッションの有効期限（未完了のチャンクアップロードがクリーンアップされるまでの時間）
   upload_session_ttl: 48h
+
+  # クリーンアップ処理の実行間隔（期限切れのアップロードセッションを削除）
   cleanup_interval: 1h
-  admin_role_id: "123456789012345678"  # 管理者ロールID（全ファイル・ディレクトリへの無制限アクセス）
+
+  # 管理者ロールID（全ファイル・ディレクトリへの無制限アクセス権限）
+  # DiscordサーバーのロールIDを指定してください
+  admin_role_id: "123456789012345678"
+
+  # ディレクトリごとのアクセス権限設定
   directories:
+    # 管理者専用ディレクトリ
     - path: "admin"
-      required_roles: ["123456789012345678"]
-      permissions: ["read", "write", "delete"]
+      required_roles: ["123456789012345678"]  # 必要なロールID
+      permissions: ["read", "write", "delete"] # 許可する操作
+
+    # スタッフ用ディレクトリ
     - path: "staff"
       required_roles: ["234567890123456789"]
       permissions: ["read", "write"]
+
+    # メンバー用ディレクトリ
     - path: "members"
       required_roles: ["345678901234567890"]
       permissions: ["read", "write"]
+
+    # 公開ディレクトリ（全員が閲覧可能）
     - path: "public"
-      required_roles: []
+      required_roles: []  # ロール不要
       permissions: ["read"]
