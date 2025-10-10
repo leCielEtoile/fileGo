@@ -276,8 +276,8 @@ function showFilesSkeleton() {
     const container = document.getElementById('files-list');
 
     // デスクトップ用テーブルSkeleton
-    const desktopSkeleton = `
-        <div class="hidden md:block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+    container.innerHTML = `
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div class="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4">
                 <div class="flex gap-4">
                     <div class="flex-1 h-3 bg-gray-200 dark:bg-gray-600 rounded skeleton"></div>
@@ -302,32 +302,6 @@ function showFilesSkeleton() {
             </div>
         </div>
     `;
-
-    // モバイル用カードSkeleton
-    const mobileSkeleton = `
-        <div class="md:hidden space-y-3">
-            ${Array.from({ length: 5 }, () => `
-                <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-                    <div class="flex items-start gap-3">
-                        <div class="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-xl skeleton"></div>
-                        <div class="flex-1 space-y-2">
-                            <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded skeleton"></div>
-                            <div class="flex gap-3">
-                                <div class="w-16 h-3 bg-gray-200 dark:bg-gray-700 rounded skeleton"></div>
-                                <div class="w-24 h-3 bg-gray-200 dark:bg-gray-700 rounded skeleton"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="flex gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <div class="flex-1 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg skeleton"></div>
-                        <div class="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg skeleton"></div>
-                    </div>
-                </div>
-            `).join('')}
-        </div>
-    `;
-
-    container.innerHTML = desktopSkeleton + mobileSkeleton;
 }
 
 // フィルタ・ソート適用
@@ -450,8 +424,8 @@ function renderFiles() {
 
         // リスト表示 - デスクトップ: テーブル、モバイル: カード
         container.innerHTML = bulkActionsBar + `
-            <!-- デスクトップ用テーブル (md以上) -->
-            <div class="hidden md:block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <!-- デスクトップ用テーブル -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <table class="w-full">
                     <thead class="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-b border-gray-200 dark:border-gray-600">
                         <tr>
@@ -522,81 +496,11 @@ function renderFiles() {
                     </tbody>
                 </table>
             </div>
-
-            <!-- モバイル用カード (md未満) -->
-            <div class="md:hidden space-y-3">
-                ${state.filteredFiles.map(file => {
-                    const filename = file.original_name || file.filename;
-                    const iconConfig = window.getFileIconSVG ? window.getFileIconSVG(filename) : { svg: '', color: 'text-gray-500', bg: 'bg-gray-50' };
-                    const isSelected = state.selectedFiles.has(file.filename);
-
-                    return `
-                    <div class="bg-white dark:bg-gray-800 rounded-xl border ${isSelected ? 'border-discord-500 bg-discord-50 dark:bg-discord-900/20' : 'border-gray-200 dark:border-gray-700'} p-4 hover:shadow-lg hover:border-discord-500 dark:hover:border-discord-500 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
-                         oncontextmenu="window.showContextMenu(event, ${JSON.stringify(file).replace(/"/g, '&quot;')})">
-                        <div class="flex items-start gap-3">
-                            <!-- チェックボックス -->
-                            <input type="checkbox"
-                                   ${isSelected ? 'checked' : ''}
-                                   onchange="window.toggleFileSelection('${file.filename}', this.checked)"
-                                   class="mt-1 w-5 h-5 text-discord-500 bg-gray-100 border-gray-300 rounded focus:ring-discord-500 focus:ring-2 cursor-pointer">
-                            <!-- アイコン -->
-                            <div class="flex-shrink-0 w-12 h-12 ${iconConfig.bg} rounded-xl flex items-center justify-center ${iconConfig.color}">
-                                ${iconConfig.svg}
-                            </div>
-
-                            <!-- 詳細 -->
-                            <div class="flex-1 min-w-0">
-                                <h4 class="font-semibold text-gray-800 dark:text-white truncate mb-1" title="${filename}">${filename}</h4>
-                                <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                                    <span class="flex items-center gap-1">
-                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
-                                        </svg>
-                                        ${formatFileSize(file.size)}
-                                    </span>
-                                    <span class="flex items-center gap-1">
-                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                        </svg>
-                                        ${formatDate(file.modified_at)}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- アクション -->
-                        <div class="flex gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                            <button onclick="window.showFileDetail(${JSON.stringify(file).replace(/"/g, '&quot;')})"
-                                    class="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white font-semibold rounded-lg transition-all transform active:scale-95">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                </svg>
-                            </button>
-                            <button onclick="downloadFile('${file.filename}')"
-                                    class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-discord-500 hover:bg-discord-600 active:bg-discord-700 text-white font-semibold rounded-lg transition-all transform active:scale-95">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                                </svg>
-                                ダウンロード
-                            </button>
-                            ${canDelete ? `
-                                <button onclick="deleteFile('${file.filename}')"
-                                        class="px-4 py-2.5 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-semibold rounded-lg transition-all transform active:scale-95">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                    </svg>
-                                </button>
-                            ` : ''}
-                        </div>
-                    </div>
-                    `;
-                }).join('')}
-            </div>
         `;
     } else {
         // グリッド表示（SVGアイコン + マイクロインタラクション）
         container.innerHTML = `
-            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div class="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                 ${state.filteredFiles.map(file => {
                     const filename = file.original_name || file.filename;
                     const iconConfig = window.getFileIconSVG ? window.getFileIconSVG(filename) : { svg: '', color: 'text-gray-500', bg: 'bg-gray-50' };
