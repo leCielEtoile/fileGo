@@ -115,12 +115,12 @@ func (h *AdminHandler) GetUploadStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stats := map[string]interface{}{
-		"total_sessions":       len(sessions),
-		"total_users":          len(userUploads),
-		"total_size":           totalSize,
-		"total_uploaded_size":  totalUploadedSize,
-		"max_concurrent":       h.config.Storage.MaxConcurrentUploads,
-		"user_upload_counts":   userUploads,
+		"total_sessions":      len(sessions),
+		"total_users":         len(userUploads),
+		"total_size":          totalSize,
+		"total_uploaded_size": totalUploadedSize,
+		"max_concurrent":      h.config.Storage.MaxConcurrentUploads,
+		"user_upload_counts":  userUploads,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
