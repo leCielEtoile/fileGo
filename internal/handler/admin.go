@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"fileserver/internal/config"
-	"fileserver/internal/models"
 	"fileserver/internal/storage"
 )
 
