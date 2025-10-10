@@ -64,7 +64,7 @@ func main() {
 	}()
 
 	// ストレージ初期化（ディレクトリ作成）
-	storageManager := storage.NewManager(cfg)
+	storageManager := storage.NewManager(cfg, db)
 	if err := storageManager.InitializeDirectories(); err != nil {
 		slog.Error("ストレージディレクトリの初期化に失敗しました", "error", err)
 		os.Exit(1)

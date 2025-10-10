@@ -55,6 +55,8 @@ type FileInfo struct {
 	Filename     string    `json:"filename"`      // 16 bytes
 	OriginalName string    `json:"original_name"` // 16 bytes
 	Size         int64     `json:"size"`          // 8 bytes
+	Uploader     string    `json:"uploader"`      // 16 bytes
+	Hash         string    `json:"hash"`          // 16 bytes
 }
 
 type UploadSession struct {

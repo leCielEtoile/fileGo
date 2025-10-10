@@ -73,6 +73,22 @@ func createTables(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_access_logs_user_id ON access_logs(user_id);
 	CREATE INDEX IF NOT EXISTS idx_access_logs_timestamp ON access_logs(timestamp);
 	CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action);
+
+	CREATE TABLE IF NOT EXISTS file_metadata (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		directory TEXT NOT NULL,
+		filename TEXT NOT NULL,
+		uploader_id TEXT,
+		uploader_name TEXT,
+		hash TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(directory, filename),
+		FOREIGN KEY (uploader_id) REFERENCES users(discord_id) ON DELETE SET NULL
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_file_metadata_directory ON file_metadata(directory);
+	CREATE INDEX IF NOT EXISTS idx_file_metadata_filename ON file_metadata(filename);
+	CREATE INDEX IF NOT EXISTS idx_file_metadata_uploader_id ON file_metadata(uploader_id);
 	`
 
 	ctx := context.Background()

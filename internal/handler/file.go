@@ -122,6 +122,11 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// メタデータを保存
+	if err := h.storageManager.SaveFileMetadata(directory, savedFile.Filename, user.DiscordID, user.Username); err != nil {
+		slog.Warn("メタデータの保存に失敗しました", "error", err)
+	}
+
 	slog.Info("ファイルアップロード成功", "user_id", user.DiscordID, "filename", header.Filename, "directory", directory, "size", header.Size)
 
 	// SSEでブロードキャスト

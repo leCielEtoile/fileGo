@@ -190,6 +190,18 @@ func (h *ChunkHandler) GetChunkStatus(w http.ResponseWriter, r *http.Request) {
 
 // CompleteChunkUpload はすべてのチャンクが受信された後、チャンク分割アップロードを完了します。
 func (h *ChunkHandler) CompleteChunkUpload(w http.ResponseWriter, r *http.Request) {
+	userVal := r.Context().Value(models.UserContextKey)
+	if userVal == nil {
+		http.Error(w, "認証情報が見つかりません", http.StatusUnauthorized)
+		return
+	}
+
+	user, ok := userVal.(*models.User)
+	if !ok {
+		http.Error(w, "認証情報の形式が不正です", http.StatusInternalServerError)
+		return
+	}
+
 	uploadID := chi.URLParam(r, "upload_id")
 
 	savedFile, err := h.uploadManager.CompleteUpload(uploadID)
@@ -197,6 +209,14 @@ func (h *ChunkHandler) CompleteChunkUpload(w http.ResponseWriter, r *http.Reques
 		slog.Error("アップロード完了エラー", "upload_id", uploadID, "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// ディレクトリとファイル名を抽出
+	directory := filepath.Dir(savedFile.Path)
+
+	// メタデータを保存
+	if err := h.storageManager.SaveFileMetadata(directory, savedFile.Filename, user.DiscordID, user.Username); err != nil {
+		slog.Warn("メタデータの保存に失敗しました", "error", err)
 	}
 
 	slog.Info("チャンクアップロード完了", "upload_id", uploadID, "final_path", savedFile.Path)

@@ -241,6 +241,12 @@ async function selectDirectory(path) {
     renderDirectories();
     updateBreadcrumb();
     await loadFiles(path);
+
+    // モバイル版: ディレクトリ選択後にメニューを自動で閉じる
+    const appSection = document.getElementById('app-section');
+    if (appSection && appSection.__x) {
+        appSection.__x.$data.showDirMenu = false;
+    }
 }
 
 // ファイル一覧読み込み（Skeleton loading対応）
