@@ -2,6 +2,7 @@ server:
   port: "8080"
   service_name: "Discord File Server"
   behind_proxy: true
+  secure_cookie: true  # HTTPSの場合はtrue、HTTP開発環境ではfalse
   trusted_proxies:
     - "172.16.0.0/12"
     - "10.0.0.0/8"
@@ -27,12 +28,11 @@ storage:
   max_concurrent_uploads: 3
   upload_session_ttl: 48h
   cleanup_interval: 1h
-  admin_role_id: "123456789012345678"  # 管理者ロールID
+  admin_role_id: "123456789012345678"  # 管理者ロールID（全ファイル・ディレクトリへの無制限アクセス）
   directories:
     - path: "user"
       required_roles: []
       permissions: ["read", "write", "delete"]
-      type: "user_private"  # ユーザー個別ディレクトリ
     - path: "public"
       required_roles: []
       permissions: ["read", "write"]
