@@ -431,3 +431,16 @@ func (um *UploadManager) getTempFilePath(uploadID, filename, directory string) s
 func (um *UploadManager) getMetaFilePath(uploadID, filename, directory string) string {
 	return filepath.Join(um.config.Storage.UploadPath, directory, fmt.Sprintf("%s_%s.meta", uploadID, sanitizeFilename(filename)))
 }
+
+// GetAllUploadSessions は現在進行中のすべてのアップロードセッション情報を取得します（管理者用）。
+func (um *UploadManager) GetAllUploadSessions() []*models.UploadSession {
+	um.mu.RLock()
+	defer um.mu.RUnlock()
+
+	sessions := make([]*models.UploadSession, 0, len(um.sessions))
+	for _, session := range um.sessions {
+		sessions = append(sessions, session)
+	}
+
+	return sessions
+}

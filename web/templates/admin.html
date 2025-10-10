@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理者画面 - {{.ServiceName}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 10px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 24px;
+        }
+
+        .back-link {
+            color: #667eea;
+            text-decoration: none;
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        .back-link:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .stat-card .value {
+            color: #333;
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .sessions-container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .sessions-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .sessions-header h2 {
+            color: #333;
+        }
+
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #5568d3;
+        }
+
+        .sessions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .sessions-table th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .sessions-table td {
+            padding: 12px;
+            border-bottom: 1px solid #dee2e6;
+            color: #666;
+        }
+
+        .sessions-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .auto-refresh input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .user-id {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .directory-tag {
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 管理者画面 - アップロード監視</h1>
+            <a href="/" class="back-link">← メインページに戻る</a>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>アクティブなセッション</h3>
+                <div class="value" id="totalSessions">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>アップロード中のユーザー</h3>
+                <div class="value" id="totalUsers">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>総アップロードサイズ</h3>
+                <div class="value" id="totalSize">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>アップロード済みサイズ</h3>
+                <div class="value" id="uploadedSize">-</div>
+            </div>
+        </div>
+
+        <div class="sessions-container">
+            <div class="sessions-header">
+                <h2>アップロード中のファイル</h2>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <div class="auto-refresh">
+                        <input type="checkbox" id="autoRefresh" checked>
+                        <label for="autoRefresh">自動更新 (5秒)</label>
+                    </div>
+                    <button class="refresh-btn" onclick="fetchData()">🔄 更新</button>
+                </div>
+            </div>
+
+            <div id="sessionsContent">
+                <div class="empty-state">読み込み中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshInterval = null;
+
+        // データ取得
+        async function fetchData() {
+            try {
+                // 統計情報取得
+                const statsResponse = await fetch('/api/admin/stats');
+                const stats = await statsResponse.json();
+
+                // セッション一覧取得
+                const sessionsResponse = await fetch('/api/admin/uploads');
+                const sessions = await sessionsResponse.json();
+
+                updateStats(stats);
+                updateSessions(sessions);
+            } catch (error) {
+                console.error('データ取得エラー:', error);
+            }
+        }
+
+        // 統計情報更新
+        function updateStats(stats) {
+            document.getElementById('totalSessions').textContent = stats.total_sessions;
+            document.getElementById('totalUsers').textContent = stats.total_users;
+            document.getElementById('totalSize').textContent = formatBytes(stats.total_size);
+            document.getElementById('uploadedSize').textContent = formatBytes(stats.total_uploaded_size);
+        }
+
+        // セッション一覧更新
+        function updateSessions(sessions) {
+            const content = document.getElementById('sessionsContent');
+
+            if (sessions.length === 0) {
+                content.innerHTML = '<div class="empty-state">現在アップロード中のファイルはありません</div>';
+                return;
+            }
+
+            let html = `
+                <table class="sessions-table">
+                    <thead>
+                        <tr>
+                            <th>ファイル名</th>
+                            <th>ディレクトリ</th>
+                            <th>ユーザーID</th>
+                            <th>進捗</th>
+                            <th>サイズ</th>
+                            <th>開始時刻</th>
+                            <th>最終更新</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            sessions.forEach(session => {
+                html += `
+                    <tr>
+                        <td>${escapeHtml(session.filename)}</td>
+                        <td><span class="directory-tag">${escapeHtml(session.directory)}</span></td>
+                        <td><span class="user-id">${escapeHtml(session.user_id)}</span></td>
+                        <td>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${session.progress}%">
+                                    ${session.progress.toFixed(1)}%
+                                </div>
+                            </div>
+                            <small>${session.uploaded_chunks} / ${session.total_chunks} チャンク</small>
+                        </td>
+                        <td>${formatBytes(session.total_size)}</td>
+                        <td>${formatTime(session.created_at)}</td>
+                        <td>${formatTime(session.updated_at)}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            content.innerHTML = html;
+        }
+
+        // バイト数を人間が読みやすい形式に変換
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // 時刻フォーマット
+        function formatTime(timeStr) {
+            return timeStr.replace(' ', ' ');
+        }
+
+        // HTMLエスケープ
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 自動更新の切り替え
+        document.getElementById('autoRefresh').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
+        });
+
+        // 自動更新開始
+        function startAutoRefresh() {
+            stopAutoRefresh();
+            autoRefreshInterval = setInterval(fetchData, 5000);
+        }
+
+        // 自動更新停止
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+
+        // 初期化
+        fetchData();
+        startAutoRefresh();
+
+        // ページ離脱時にクリーンアップ
+        window.addEventListener('beforeunload', () => {
+            stopAutoRefresh();
+        });
+    </script>
+</body>
+</html>
