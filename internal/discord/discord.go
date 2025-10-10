@@ -130,6 +130,13 @@ func (c *Client) GetMemberRoles(userID string) ([]string, error) {
 		return nil, fmt.Errorf("JSONパースエラー: %w", err)
 	}
 
+	// 取得したロール情報をログ出力
+	slog.Info("Discord APIからロール情報を取得",
+		"user_id", userID,
+		"username", member.User.Username,
+		"roles", member.Roles,
+		"role_count", len(member.Roles))
+
 	// キャッシュに保存
 	c.cacheMutex.Lock()
 	c.cache[userID] = &cacheEntry{
