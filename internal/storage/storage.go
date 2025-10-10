@@ -3,6 +3,9 @@
 package storage
 
 import (
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,6 +22,7 @@ import (
 // Manager はディレクトリ作成とファイル管理を含むファイルストレージ操作を処理します。
 type Manager struct {
 	config *config.Config
+	db     *sql.DB
 }
 
 // SavedFile は正常に保存されたファイルとそのメタデータを表します。
@@ -29,9 +33,10 @@ type SavedFile struct {
 }
 
 // NewManager は提供された設定で新しいストレージマネージャーインスタンスを作成します。
-func NewManager(cfg *config.Config) *Manager {
+func NewManager(cfg *config.Config, db *sql.DB) *Manager {
 	return &Manager{
 		config: cfg,
+		db:     db,
 	}
 }
 
@@ -135,11 +140,19 @@ func (m *Manager) ListFiles(directory string) ([]models.FileInfo, error) {
 		// 元のファイル名を抽出
 		originalName := extractOriginalFilename(entry.Name())
 
+		// メタデータを取得
+		uploader, hash, err := m.GetFileMetadata(directory, entry.Name())
+		if err != nil {
+			slog.Warn("メタデータの取得に失敗しました", "filename", entry.Name(), "error", err)
+		}
+
 		files = append(files, models.FileInfo{
 			Filename:     entry.Name(),
 			OriginalName: originalName,
 			Size:         info.Size(),
 			ModifiedAt:   info.ModTime(),
+			Uploader:     uploader,
+			Hash:         hash,
 		})
 	}
 
@@ -174,4 +187,72 @@ func extractOriginalFilename(filename string) string {
 		return parts[1]
 	}
 	return filename
+}
+
+// SaveFileMetadata はファイルのメタデータをデータベースに保存します。
+func (m *Manager) SaveFileMetadata(directory, filename, uploaderID, uploaderName string) error {
+	if m.db == nil {
+		return fmt.Errorf("データベース接続が設定されていません")
+	}
+
+	// ファイルのハッシュ値を計算
+	hash, err := m.calculateFileHash(directory, filename)
+	if err != nil {
+		slog.Warn("ファイルハッシュの計算に失敗しました", "error", err)
+		hash = "" // ハッシュ計算失敗時は空文字列
+	}
+
+	query := `
+		INSERT INTO file_metadata (directory, filename, uploader_id, uploader_name, hash)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(directory, filename) DO UPDATE SET
+			uploader_id = excluded.uploader_id,
+			uploader_name = excluded.uploader_name,
+			hash = excluded.hash,
+			created_at = CURRENT_TIMESTAMP
+	`
+
+	_, err = m.db.Exec(query, directory, filename, uploaderID, uploaderName, hash)
+	if err != nil {
+		return fmt.Errorf("メタデータの保存に失敗しました: %w", err)
+	}
+
+	return nil
+}
+
+// GetFileMetadata はファイルのメタデータをデータベースから取得します。
+func (m *Manager) GetFileMetadata(directory, filename string) (uploader string, hash string, err error) {
+	if m.db == nil {
+		return "", "", nil
+	}
+
+	query := `SELECT uploader_name, hash FROM file_metadata WHERE directory = ? AND filename = ?`
+	err = m.db.QueryRow(query, directory, filename).Scan(&uploader, &hash)
+	if err == sql.ErrNoRows {
+		return "", "", nil // データが存在しない場合はエラーではなく空文字列を返す
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("メタデータの取得に失敗しました: %w", err)
+	}
+
+	return uploader, hash, nil
+}
+
+// calculateFileHash はファイルのSHA256ハッシュ値を計算します。
+func (m *Manager) calculateFileHash(directory, filename string) (string, error) {
+	filePath := filepath.Join(m.config.Storage.UploadPath, directory, filename)
+
+	// #nosec G304 - filePath is constructed from controlled inputs
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("ファイルのオープンに失敗しました: %w", err)
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return "", fmt.Errorf("ハッシュ計算に失敗しました: %w", err)
+	}
+
+	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
