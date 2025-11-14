@@ -68,6 +68,16 @@ func (pc *Checker) CheckPermission(userID, directory, permission string) (bool, 
 		return false, fmt.Errorf("ユーザーロールの取得に失敗しました: %w", err)
 	}
 
+	// 管理者の場合は全ディレクトリにアクセス可能
+	if pc.config.Storage.AdminRoleID != "" {
+		for _, userRole := range userRoles {
+			if userRole == pc.config.Storage.AdminRoleID {
+				slog.Debug("管理者権限によるアクセス許可", "user_id", userID, "directory", directory)
+				return true, nil
+			}
+		}
+	}
+
 	// ユーザーのロールとrequired_rolesを照合
 	for _, userRole := range userRoles {
 		for _, requiredRole := range dirConfig.RequiredRoles {

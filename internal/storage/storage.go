@@ -112,7 +112,7 @@ func (m *Manager) SaveFile(file io.Reader, filename, directory string) (*SavedFi
 	}, nil
 }
 
-// ListFiles は指定されたディレクトリ内のすべてのファイルのリストを返します。
+// ListFiles は指定されたディレクトリ内のすべてのファイルとサブディレクトリのリストを返します。
 // 一時ファイル（.temp）とメタデータファイル（.meta）はリストから除外されます。
 func (m *Manager) ListFiles(directory string) ([]models.FileInfo, error) {
 	dirPath := filepath.Join(m.config.Storage.UploadPath, directory)
@@ -122,19 +122,34 @@ func (m *Manager) ListFiles(directory string) ([]models.FileInfo, error) {
 		return nil, fmt.Errorf("ディレクトリ読み込みエラー: %w", err)
 	}
 
-	files := make([]models.FileInfo, 0)
+	items := make([]models.FileInfo, 0)
 	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// ディレクトリの場合
 		if entry.IsDir() {
+			// サブディレクトリの相対パスを構築
+			subDirPath := entry.Name()
+			if directory != "" {
+				subDirPath = filepath.Join(directory, entry.Name())
+			}
+
+			items = append(items, models.FileInfo{
+				Filename:     entry.Name(),
+				OriginalName: entry.Name(),
+				Size:         0,
+				ModifiedAt:   info.ModTime(),
+				IsDirectory:  true,
+				Path:         subDirPath,
+			})
 			continue
 		}
 
 		// .temp, .metaファイルは除外
 		if strings.HasSuffix(entry.Name(), ".temp") || strings.HasSuffix(entry.Name(), ".meta") {
-			continue
-		}
-
-		info, err := entry.Info()
-		if err != nil {
 			continue
 		}
 
@@ -147,17 +162,25 @@ func (m *Manager) ListFiles(directory string) ([]models.FileInfo, error) {
 			slog.Warn("メタデータの取得に失敗しました", "filename", entry.Name(), "error", err)
 		}
 
-		files = append(files, models.FileInfo{
+		// ファイルの相対パスを構築
+		filePath := entry.Name()
+		if directory != "" {
+			filePath = filepath.Join(directory, entry.Name())
+		}
+
+		items = append(items, models.FileInfo{
 			Filename:     entry.Name(),
 			OriginalName: originalName,
 			Size:         info.Size(),
 			ModifiedAt:   info.ModTime(),
 			Uploader:     uploader,
 			Hash:         hash,
+			IsDirectory:  false,
+			Path:         filePath,
 		})
 	}
 
-	return files, nil
+	return items, nil
 }
 
 // DeleteFile は指定されたディレクトリからファイルを削除します。

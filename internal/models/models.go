@@ -56,7 +56,9 @@ type FileInfo struct {
 	OriginalName string    `json:"original_name"` // 16 bytes
 	Uploader     string    `json:"uploader"`      // 16 bytes
 	Hash         string    `json:"hash"`          // 16 bytes
+	Path         string    `json:"path"`          // 16 bytes - ファイル/ディレクトリの相対パス
 	Size         int64     `json:"size"`          // 8 bytes
+	IsDirectory  bool      `json:"is_directory"`  // 1 byte - ディレクトリかどうか
 }
 
 type UploadSession struct {
