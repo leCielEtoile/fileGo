@@ -213,7 +213,7 @@ function renderDirectories() {
     }).join('');
 }
 
-// パンくずリスト更新
+// パンくずリスト更新（インタラクティブ対応）
 function updateBreadcrumb() {
     const breadcrumb = document.getElementById('breadcrumb');
     if (!state.selectedDirectory) {
@@ -221,12 +221,41 @@ function updateBreadcrumb() {
         return;
     }
 
+    // パスを分割してパンくずリストを構築
+    const pathParts = state.selectedDirectory.split('/');
+    let currentPath = '';
+    const breadcrumbItems = pathParts.map((part, index) => {
+        currentPath = index === 0 ? part : `${currentPath}/${part}`;
+        const isLast = index === pathParts.length - 1;
+
+        if (isLast) {
+            // 最後の要素（現在のディレクトリ）はクリック不可
+            return `<span class="font-semibold text-gray-800 dark:text-white">${part}</span>`;
+        } else {
+            // 親ディレクトリはクリック可能
+            const path = currentPath;
+            return `<button onclick="selectDirectory('${path}')" class="font-medium text-discord-500 hover:text-discord-600 dark:text-discord-400 dark:hover:text-discord-300 hover:underline transition-colors">${part}</button>`;
+        }
+    });
+
+    // 区切り文字を挿入
+    const breadcrumbHTML = breadcrumbItems.map((item, index) => {
+        if (index === 0) {
+            return item;
+        }
+        return `<svg class="w-4 h-4 text-gray-400 mx-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>${item}`;
+    }).join('');
+
     breadcrumb.innerHTML = `
-        <svg class="w-4 h-4 text-discord-500" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
-        </svg>
-        <span class="ml-2 font-semibold text-gray-800 dark:text-white">${state.selectedDirectory}</span>
-        <span class="ml-2 text-gray-500 dark:text-gray-400">(${state.files.length} ファイル)</span>
+        <div class="flex items-center">
+            <svg class="w-4 h-4 text-discord-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+            </svg>
+            ${breadcrumbHTML}
+            <span class="ml-3 text-gray-500 dark:text-gray-400">(${state.files.length} ファイル)</span>
+        </div>
     `;
 }
 
@@ -450,8 +479,41 @@ function renderFiles() {
                     <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                         ${state.filteredFiles.map(file => {
                             const filename = file.original_name || file.filename;
-                            const iconConfig = window.getFileIconSVG ? window.getFileIconSVG(filename) : { svg: '', color: 'text-gray-500', bg: 'bg-gray-50' };
                             const isSelected = state.selectedFiles.has(file.filename);
+
+                            // ディレクトリの場合
+                            if (file.is_directory) {
+                                const folderIconSVG = `<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>`;
+                                return `
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all group cursor-pointer"
+                                    onclick="selectDirectory('${file.path}')">
+                                    <td class="px-6 py-4"></td>
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <div class="flex-shrink-0 w-10 h-10 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center text-yellow-600 dark:text-yellow-400 transition-transform group-hover:scale-110">
+                                                ${folderIconSVG}
+                                            </div>
+                                            <span class="font-medium text-gray-800 dark:text-white truncate max-w-md" title="${filename}">${filename}</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">-</td>
+                                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">${formatDate(file.modified_at)}</td>
+                                    <td class="px-6 py-4 text-right">
+                                        <div class="flex justify-end gap-2">
+                                            <button onclick="event.stopPropagation(); selectDirectory('${file.path}')" title="開く"
+                                                    class="p-2 text-discord-500 hover:bg-discord-50 dark:hover:bg-discord-900/20 rounded-lg transition-all transform hover:scale-110">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                `;
+                            }
+
+                            // ファイルの場合
+                            const iconConfig = window.getFileIconSVG ? window.getFileIconSVG(filename) : { svg: '', color: 'text-gray-500', bg: 'bg-gray-50' };
 
                             return `
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all group ${isSelected ? 'bg-discord-50 dark:bg-discord-900/20' : ''}"
@@ -509,6 +571,25 @@ function renderFiles() {
             <div class="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                 ${state.filteredFiles.map(file => {
                     const filename = file.original_name || file.filename;
+
+                    // ディレクトリの場合
+                    if (file.is_directory) {
+                        const folderIconSVG = `<svg class="w-12 h-12" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>`;
+                        return `
+                        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:shadow-xl hover:border-yellow-500 dark:hover:border-yellow-500 transition-all transform hover:scale-105 hover:-translate-y-1 active:scale-100 group cursor-pointer"
+                             onclick="selectDirectory('${file.path}')">
+                            <div class="flex flex-col items-center text-center">
+                                <div class="w-20 h-20 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl flex items-center justify-center text-yellow-600 dark:text-yellow-400 mb-3 p-4 transition-transform group-hover:scale-110 group-hover:rotate-3">
+                                    ${folderIconSVG}
+                                </div>
+                                <div class="font-semibold text-sm text-gray-800 dark:text-white truncate w-full mb-1" title="${filename}">${filename}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400 mb-3">フォルダ</div>
+                            </div>
+                        </div>
+                        `;
+                    }
+
+                    // ファイルの場合
                     const iconConfig = window.getFileIconSVG ? window.getFileIconSVG(filename) : { svg: '', color: 'text-gray-500', bg: 'bg-gray-50' };
 
                     return `
