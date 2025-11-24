@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: 🐹 Go環境をセットアップ
         uses: actions/setup-go@v6
@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: 🐹 Go環境をセットアップ
         uses: actions/setup-go@v6
@@ -82,7 +82,7 @@ jobs:
             goarch: arm64
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: 🐹 Go環境をセットアップ
         uses: actions/setup-go@v6
@@ -110,7 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: 🔒 Gosecセキュリティスキャナーを実行
         uses: securego/gosec@master
@@ -150,7 +150,7 @@ jobs:
         run: echo "PR時はARM64ビルドをスキップします" && exit 0
 
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: 🔧 QEMUをセットアップ
         if: matrix.platform == 'linux/arm64'
@@ -285,7 +285,7 @@ jobs:
     needs: [docker]
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: 🔧 Docker Buildxをセットアップ
         uses: docker/setup-buildx-action@v3
