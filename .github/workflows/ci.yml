@@ -291,7 +291,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: 📥 前ジョブからDockerイメージをダウンロード
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         if: github.event_name == 'pull_request'
         with:
           name: docker-image
