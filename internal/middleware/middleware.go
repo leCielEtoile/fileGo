@@ -9,10 +9,13 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"fileserver/internal/config"
 	"fileserver/internal/models"
+
+	"golang.org/x/time/rate"
 )
 
 // Logger はロギングミドルウェアです。
@@ -104,6 +107,116 @@ func isTrustedProxy(ip string, trustedProxies []string) bool {
 	}
 
 	return false
+}
+
+// visitor はIP単位のレート制限を管理します。
+type visitor struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+// RateLimiter はレート制限を管理する構造体です。
+type RateLimiter struct {
+	visitors map[string]*visitor
+	mu       sync.RWMutex
+	rate     rate.Limit
+	burst    int
+}
+
+// NewRateLimiter は新しいRateLimiterを作成します。
+// rps: 秒あたりのリクエスト数、burst: バースト許可数
+func NewRateLimiter(rps float64, burst int) *RateLimiter {
+	rl := &RateLimiter{
+		visitors: make(map[string]*visitor),
+		rate:     rate.Limit(rps),
+		burst:    burst,
+	}
+
+	// 古いエントリのクリーンアップ（5分ごと）
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			rl.cleanupVisitors()
+		}
+	}()
+
+	return rl
+}
+
+// getVisitor はIPアドレスのvisitorを取得または作成します。
+func (rl *RateLimiter) getVisitor(ip string) *rate.Limiter {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	v, exists := rl.visitors[ip]
+	if !exists {
+		limiter := rate.NewLimiter(rl.rate, rl.burst)
+		rl.visitors[ip] = &visitor{limiter: limiter, lastSeen: time.Now()}
+		return limiter
+	}
+
+	v.lastSeen = time.Now()
+	return v.limiter
+}
+
+// cleanupVisitors は3分以上アクセスのないvisitorを削除します。
+func (rl *RateLimiter) cleanupVisitors() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	for ip, v := range rl.visitors {
+		if time.Since(v.lastSeen) > 3*time.Minute {
+			delete(rl.visitors, ip)
+		}
+	}
+}
+
+// Middleware はレート制限ミドルウェアを返します。
+func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := r.RemoteAddr
+		limiter := rl.getVisitor(ip)
+
+		if !limiter.Allow() {
+			slog.Warn("レート制限超過", "ip", ip, "path", r.URL.Path)
+			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// SecurityHeaders はセキュリティヘッダーを設定するミドルウェアです。
+func SecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// XSS対策
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+
+		// Content Security Policy
+		csp := "default-src 'self'; " +
+			"script-src 'self' 'unsafe-inline'; " +
+			"style-src 'self' 'unsafe-inline'; " +
+			"img-src 'self' data: https:; " +
+			"font-src 'self'; " +
+			"connect-src 'self'; " +
+			"frame-ancestors 'none'"
+		w.Header().Set("Content-Security-Policy", csp)
+
+		// HTTPS強制（プロキシ経由の場合）
+		if r.Header.Get("X-Forwarded-Proto") == "https" {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+		}
+
+		// その他のセキュリティヘッダー
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // AuthMiddleware は認証ミドルウェアです。

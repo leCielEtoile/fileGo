@@ -45,7 +45,7 @@ func main() {
 	slog.SetDefault(logger)
 
 	// 設定読み込み
-	cfg, err := config.Load("/root/config/config.yaml")
+	cfg, err := config.Load("/app/config/config.yaml")
 	if err != nil {
 		slog.Error("設定ファイルの読み込みに失敗しました", "error", err)
 		os.Exit(1)
@@ -91,12 +91,17 @@ func main() {
 	fileHandler.SetSSEHandler(sseHandler)
 	authHandler.SetSSEHandler(sseHandler)
 
+	// レート制限を初期化（10リクエスト/秒、バースト20）
+	rateLimiter := middleware.NewRateLimiter(10, 20)
+
 	// ルーター設定
 	r := chi.NewRouter()
 
 	// ミドルウェア
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(middleware.SecurityHeaders)
+	r.Use(rateLimiter.Middleware)
 	r.Use(middleware.RealIP(cfg.Server.BehindProxy, cfg.Server.TrustedProxies))
 
 	// 静的ファイル

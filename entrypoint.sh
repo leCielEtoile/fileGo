@@ -7,15 +7,15 @@ echo "=========================================="
 
 # 必要なディレクトリを作成
 echo "📁 Creating required directories..."
-mkdir -p /root/config
-mkdir -p /root/data
-mkdir -p /root/logs
+mkdir -p /app/config
+mkdir -p /app/data
+mkdir -p /app/logs
 
 # config.yamlが存在しない場合、デフォルト設定を生成
-if [ ! -f /root/config/config.yaml ]; then
+if [ ! -f /app/config/config.yaml ]; then
     echo "⚙️  config.yaml not found. Generating default configuration..."
 
-    cat > /root/config/config.yaml <<'EOF'
+    cat > /app/config/config.yaml <<'EOF'
 server:
   port: "8080"
   service_name: "Discord File Server"
@@ -33,11 +33,11 @@ discord:
   redirect_url: "https://yourdomain.com/auth/callback"
 
 database:
-  path: "/root/config/fileserver.db"
+  path: "/app/config/fileserver.db"
   max_connections: 10
 
 storage:
-  upload_path: "/root/data"
+  upload_path: "/app/data"
   max_file_size: 104857600
   chunk_upload_enabled: true
   chunk_size: 20971520
@@ -59,11 +59,11 @@ storage:
       permissions: ["read", "write", "delete"]
 EOF
 
-    echo "✅ Default config.yaml created at /root/config/config.yaml"
+    echo "✅ Default config.yaml created at /app/config/config.yaml"
     echo ""
     echo "⚠️  IMPORTANT: Please configure the following settings:"
     echo "   - Set environment variables for Discord (DISCORD_BOT_TOKEN, etc.)"
-    echo "   - Or edit /root/config/config.yaml manually"
+    echo "   - Or edit /app/config/config.yaml manually"
     echo ""
 else
     echo "✅ config.yaml already exists"
@@ -72,9 +72,9 @@ fi
 # 設定確認
 echo ""
 echo "📋 Configuration:"
-echo "   Config file: /root/config/config.yaml"
-echo "   Database: ${DATABASE_PATH:-/root/config/fileserver.db}"
-echo "   Data path: ${STORAGE_UPLOAD_PATH:-/root/data}"
+echo "   Config file: /app/config/config.yaml"
+echo "   Database: ${DATABASE_PATH:-/app/config/fileserver.db}"
+echo "   Data path: ${STORAGE_UPLOAD_PATH:-/app/data}"
 echo "   Server port: ${SERVER_PORT:-8080}"
 echo "   Service name: ${SERVER_SERVICE_NAME:-Discord File Server}"
 

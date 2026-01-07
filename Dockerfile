@@ -25,20 +25,28 @@ RUN apk --no-cache add ca-certificates tzdata
 # タイムゾーン設定
 ENV TZ=Asia/Tokyo
 
-WORKDIR /root
+# 非rootユーザーとグループを作成
+RUN addgroup -g 1000 -S appgroup && \
+    adduser -u 1000 -S appuser -G appgroup
+
+# アプリケーションディレクトリを作成
+RUN mkdir -p /app/config /app/data /app/logs && \
+    chown -R appuser:appgroup /app
+
+WORKDIR /app
 
 # ビルドしたバイナリをコピー
-COPY --from=builder /build/fileserver .
+COPY --from=builder --chown=appuser:appgroup /build/fileserver .
 
 # Webファイルをコピー
-COPY --from=builder /build/web ./web
+COPY --from=builder --chown=appuser:appgroup /build/web ./web
 
 # エントリーポイントスクリプトをコピー
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=appuser:appgroup entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# ディレクトリ作成
-RUN mkdir -p /root/config /root/data /root/logs
+# 非rootユーザーに切り替え
+USER appuser
 
 # ポート公開
 EXPOSE 8080
