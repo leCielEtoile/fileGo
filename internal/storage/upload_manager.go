@@ -90,16 +90,17 @@ func (um *UploadManager) CreateUploadSession(userID, filename, directory string,
 	// .tempファイル作成
 	tempPath := um.getTempFilePath(uploadID, filename, directory)
 	if err := os.MkdirAll(filepath.Dir(tempPath), 0750); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("一時ディレクトリの作成に失敗しました: %w", err)
 	}
 
 	// #nosec G304 - tempPath is constructed from sanitized inputs
 	tempFile, err := os.Create(tempPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("一時ファイルの作成に失敗しました: %w", err)
 	}
 	if err := tempFile.Close(); err != nil {
 		slog.Error("一時ファイルのクローズに失敗しました", "error", err)
+		return nil, fmt.Errorf("一時ファイルのクローズに失敗しました: %w", err)
 	}
 
 	// .metaファイル保存
@@ -406,6 +407,7 @@ func (um *UploadManager) loadSessionFromMeta(uploadID string) (*models.UploadSes
 			continue
 		}
 
+		// #nosec G304 - matches[0] comes from filepath.Glob on sanitized paths
 		data, err := os.ReadFile(matches[0])
 		if err != nil {
 			continue

@@ -18,6 +18,9 @@ func Initialize(dbPath string) (*sql.DB, error) {
 
 	ctx := context.Background()
 	if err := db.PingContext(ctx); err != nil {
+		if closeErr := db.Close(); closeErr != nil {
+			return nil, fmt.Errorf("データベース接続エラー: %w (クローズエラー: %w)", err, closeErr)
+		}
 		return nil, fmt.Errorf("データベース接続エラー: %w", err)
 	}
 
