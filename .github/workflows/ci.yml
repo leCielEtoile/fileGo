@@ -58,7 +58,7 @@ jobs:
         run: go tool cover -html=coverage.out -o coverage.html
 
       - name: 📤 カバレッジレポートをアップロード
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: |
@@ -97,7 +97,7 @@ jobs:
           go build -v -ldflags="-s -w" -o fileserver-${{ matrix.goos }}-${{ matrix.goarch }} .
 
       - name: 📤 ビルド成果物をアップロード
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fileserver-${{ matrix.goos }}-${{ matrix.goarch }}
           path: fileserver-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -117,7 +117,7 @@ jobs:
         continue-on-error: true
 
       - name: 📤 Gosec結果をアップロード
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gosec-results
           path: gosec-results.json
@@ -201,7 +201,7 @@ jobs:
 
       - name: 📤 Dockerイメージをアップロード
         if: github.event_name == 'pull_request' && matrix.platform == 'linux/amd64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-image
           path: /tmp/image.tar
@@ -270,7 +270,7 @@ jobs:
         continue-on-error: true
 
       - name: 📤 SBOMをアップロード
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.spdx.json
