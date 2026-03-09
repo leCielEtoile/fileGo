@@ -159,7 +159,7 @@ jobs:
 
       - name: 🔐 GitHub Container Registryにログイン
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -233,7 +233,7 @@ jobs:
       packages: write
     steps:
       - name: 🔐 GitHub Container Registryにログイン
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
