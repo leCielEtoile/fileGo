@@ -155,7 +155,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: 🔧 Docker Buildxをセットアップ
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: 🔐 GitHub Container Registryにログイン
         if: github.event_name != 'pull_request'
@@ -286,7 +286,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: 🔧 Docker Buildxをセットアップ
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: 📥 前ジョブからDockerイメージをダウンロード
         uses: actions/download-artifact@v5
