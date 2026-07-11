@@ -98,7 +98,6 @@ func main() {
 		os.Exit(runHealthcheck())
 	}
 
-	// ロガー初期化
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -106,9 +105,7 @@ func main() {
 
 	slog.Info("fileserver を起動します", "version", Version, "build_date", BuildDate, "git_commit", GitCommit)
 
-	// 設定読み込み
-	// CONFIG_PATH環境変数が設定されていればそれを使用し、
-	// 未設定の場合は実行ファイルと同じディレクトリのconfig.yamlを既定値とする。
+	// CONFIG_PATH未設定時は実行ファイルと同じディレクトリのconfig.yamlを既定にする。
 	configPath := config.ResolvePath()
 	slog.Info("設定ファイルを読み込みます", "path", configPath)
 	cfg, err := config.Load(configPath, defaultConfigYAML)
@@ -124,7 +121,6 @@ func main() {
 		slog.Warn("認証情報がプレースホルダのままです。config.yaml の auth.provider を編集してください", "path", configPath)
 	}
 
-	// データベース初期化
 	db, err := database.Initialize(cfg.Database.Path, cfg.Database.MaxConnections)
 	if err != nil {
 		slog.Error("データベースの初期化に失敗しました", "error", err)
@@ -136,17 +132,14 @@ func main() {
 		}
 	}()
 
-	// ストレージ初期化（ディレクトリ作成）
 	storageManager := storage.NewManager(cfg, db)
 	if err := storageManager.InitializeDirectories(); err != nil {
 		slog.Error("ストレージディレクトリの初期化に失敗しました", "error", err)
 		os.Exit(1)
 	}
 
-	// アップロードマネージャー初期化
 	uploadManager := storage.NewUploadManager(cfg)
 
-	// 認証プロバイダー初期化（単一プロバイダー）
 	// OIDCのロールは再起動後も復元できるようDBへ永続化する（Discordでは未使用）。
 	roleStore := rolestore.New(db)
 	authProvider, err := authprovider.New(context.Background(), cfg.Auth.Provider, roleStore)
@@ -155,31 +148,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 権限チェッカー初期化
 	permissionChecker := permission.NewChecker(cfg, authProvider, storageManager, db)
-
-	// SSEハンドラー初期化
 	sseHandler := handler.NewSSEHandler()
 
-	// テンプレートを起動時に一度だけパースする（リクエスト毎の再パースを避ける）。
+	// テンプレートはリクエスト毎の再パースを避けるため起動時に一度だけパースする。
 	indexTmpl := loadTemplate("web/templates/index.html")
 	indexMobileTmpl := loadTemplate("web/templates/index_mobile.html")
 	adminTmpl := loadTemplate("web/templates/admin.html")
 
-	// ハンドラー初期化
 	authHandler := handler.NewAuthHandler(cfg, db, authProvider, storageManager)
 	fileHandler := handler.NewFileHandler(cfg, storageManager, uploadManager, permissionChecker)
 	chunkHandler := handler.NewChunkHandler(storageManager, uploadManager, permissionChecker)
 	adminHandler := handler.NewAdminHandler(cfg, uploadManager, adminTmpl)
 
-	// SSEハンドラーをファイルハンドラーに注入
 	fileHandler.SetSSEHandler(sseHandler)
 	authHandler.SetSSEHandler(sseHandler)
 
-	// ルーター設定
 	r := chi.NewRouter()
 
-	// ミドルウェア
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RealIP(cfg.Server.BehindProxy, cfg.Server.TrustedProxies))
@@ -198,12 +184,10 @@ func main() {
 		loginLabel = "Discord"
 	}
 
-	// ルートパス（Webインターフェース）。テンプレートは起動時にパース済み。
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		// Vary: User-Agentヘッダーを追加（SEO対策）
+		// UAでPC/モバイル用テンプレートを出し分けるため、キャッシュをUAで分ける。
 		w.Header().Set("Vary", "User-Agent")
 
-		// User-Agentを判定してテンプレートを切り替え
 		tmpl := indexTmpl
 		if isMobile(r.Header.Get("User-Agent")) {
 			tmpl = indexMobileTmpl
@@ -220,7 +204,6 @@ func main() {
 		}
 	})
 
-	// ヘルスチェック
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte("OK")); err != nil {
@@ -233,17 +216,12 @@ func main() {
 	r.Get("/auth/callback", authHandler.Callback)
 	r.Get("/auth/logout", authHandler.Logout)
 
-	// 認証が必要なエンドポイント
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.AuthMiddleware(cfg, db, authProvider))
 
-		// ユーザー情報
 		r.Get("/api/user", authHandler.GetCurrentUser)
-
-		// Server-Sent Events
 		r.Get("/api/events", sseHandler.HandleSSE)
 
-		// ファイル操作
 		r.Post("/files/upload", fileHandler.Upload)
 		r.Get("/files", fileHandler.ListFiles)
 		r.Get("/files/directories", fileHandler.ListDirectories)
@@ -261,7 +239,6 @@ func main() {
 			slog.Info("チャンクアップロードは無効化されています（storage.chunk_upload_enabled=false）")
 		}
 
-		// 管理者専用エンドポイント
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AdminMiddleware(cfg, authProvider))
 
@@ -271,7 +248,6 @@ func main() {
 		})
 	})
 
-	// HTTPサーバー起動
 	addr := ":" + cfg.Server.Port
 	srv := &http.Server{
 		Addr:         addr,
@@ -281,7 +257,6 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// グレースフルシャットダウン
 	go func() {
 		slog.Info("サーバーを起動しました", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -290,7 +265,7 @@ func main() {
 		}
 	}()
 
-	// シグナル待機
+	// SIGINT/SIGTERMを受けてから、処理中リクエストを待ってグレースフルに停止する。
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

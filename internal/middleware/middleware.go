@@ -21,7 +21,6 @@ func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Custom response writer
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
 		next.ServeHTTP(wrapped, r)
@@ -68,12 +67,12 @@ func RealIP(behindProxy bool, trustedProxies []string) func(http.Handler) http.H
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if behindProxy {
-				// Get real IP from X-Forwarded-For header
+				// 直前のホップが信頼済みプロキシのときだけXFFを採用する。
+				// そうでなければクライアントがRemoteAddrを詐称できてしまう。
 				xForwardedFor := r.Header.Get("X-Forwarded-For")
 				if xForwardedFor != "" {
 					ips := strings.Split(xForwardedFor, ",")
 					if len(ips) > 0 {
-						// Check if request is from trusted proxy
 						remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr) // nolint:errcheck
 						if isTrustedProxy(remoteIP, trustedProxies) {
 							r.RemoteAddr = strings.TrimSpace(ips[0])
@@ -123,7 +122,6 @@ func isTrustedProxy(ip string, trustedProxies []string) bool {
 func AuthMiddleware(cfg *config.Config, db *sql.DB, provider authprovider.Provider) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get session token
 			cookie, err := r.Cookie("session_token")
 			if err != nil {
 				slog.Debug("認証Cookie未検出", "path", r.URL.Path, "error", err)
@@ -133,7 +131,6 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB, provider authprovider.Provid
 
 			slog.Debug("認証Cookie検出", "path", r.URL.Path, "token_prefix", tokenPrefix(cookie.Value))
 
-			// Validate session
 			var session models.Session
 			err = db.QueryRowContext(r.Context(), `
 				SELECT session_token, user_id, expires_at
@@ -154,7 +151,6 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB, provider authprovider.Provid
 
 			slog.Debug("セッション検証成功", "user_id", session.UserID)
 
-			// Get user information
 			var user models.User
 			err = db.QueryRowContext(r.Context(), `
 				SELECT id, provider, subject, username, avatar, created_at, last_login
@@ -208,7 +204,6 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB, provider authprovider.Provid
 				return
 			}
 
-			// Add user info to context
 			ctx := context.WithValue(r.Context(), models.UserContextKey, &user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -219,7 +214,6 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB, provider authprovider.Provid
 func AdminMiddleware(cfg *config.Config, provider authprovider.Provider) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// コンテキストからユーザー情報を取得
 			user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 			if !ok {
 				slog.Warn("管理者チェック: ユーザー情報が見つかりません")
@@ -227,7 +221,7 @@ func AdminMiddleware(cfg *config.Config, provider authprovider.Provider) func(ht
 				return
 			}
 
-			// プロバイダーから最新のロール情報を取得
+			// ロールはキャッシュではなくプロバイダーから都度取得し、降格を即時反映する。
 			roles, err := provider.GetUserRoles(r.Context(), user.Subject)
 			if err != nil {
 				slog.Error("管理者チェック: ロール情報取得エラー", "error", err, "user_id", user.ID)
@@ -235,7 +229,6 @@ func AdminMiddleware(cfg *config.Config, provider authprovider.Provider) func(ht
 				return
 			}
 
-			// 管理者ロールを持っているかチェック
 			if !cfg.HasAdminRole(roles) {
 				slog.Warn("管理者権限がありません", "user_id", user.ID, "username", user.Username)
 				http.Error(w, "Forbidden", http.StatusForbidden)

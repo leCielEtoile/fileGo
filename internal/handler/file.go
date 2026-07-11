@@ -49,25 +49,22 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// リクエストボディを最大ファイルサイズ + マルチパートのオーバーヘッド分に制限する。
-	// FormValue/FormFile がボディをパースする前に設定する必要がある。
-	const multipartOverhead = 1 << 20 // 1MB（境界・フォームフィールド用の余裕）
+	// FormValue/FormFile がボディをパースする前に上限を掛ける必要がある。
+	// マルチパート境界・フォームフィールド分の余裕を加える。
+	const multipartOverhead = 1 << 20
 	r.Body = http.MaxBytesReader(w, r.Body, h.config.Storage.MaxFileSize+multipartOverhead)
 
-	// ディレクトリパス取得
 	directory := r.FormValue("directory")
 	if directory == "" {
 		http.Error(w, "ディレクトリが指定されていません", http.StatusBadRequest)
 		return
 	}
 
-	// パストラバーサル対策
 	directory, ok = cleanDir(w, directory)
 	if !ok {
 		return
 	}
 
-	// 権限チェック
 	hasPermission, err := h.permissionChecker.CheckPermission(user.ID, directory, "write")
 	if err != nil {
 		slog.Error("権限チェックエラー", "error", err)
@@ -79,7 +76,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// userディレクトリの場合、ユーザー個別ディレクトリを自動作成
+	// user配下は初回アップロード時に個別ディレクトリを作る（事前作成しない方針）。
 	if strings.HasPrefix(directory, "user/") {
 		if ensureErr := h.storageManager.EnsureUserDirectory(user.GetDirectoryName()); ensureErr != nil {
 			slog.Error("ユーザーディレクトリ作成エラー", "error", ensureErr)
@@ -88,7 +85,6 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ファイル取得
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		http.Error(w, "ファイルの取得に失敗しました", http.StatusBadRequest)
@@ -100,13 +96,11 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// ファイルサイズチェック（100MB制限）
 	if header.Size > h.config.Storage.MaxFileSize {
 		http.Error(w, fmt.Sprintf("ファイルサイズが制限を超えています（最大: %d MB）", h.config.Storage.MaxFileSize/(1024*1024)), http.StatusBadRequest)
 		return
 	}
 
-	// ファイル保存
 	savedFile, err := h.storageManager.SaveFile(file, header.Filename, directory)
 	if err != nil {
 		slog.Error("ファイル保存エラー", "error", err)
@@ -114,14 +108,13 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// メタデータを保存
+	// メタデータ保存の失敗はアップロード自体を失敗させない（本体は保存済み）。
 	if err := h.storageManager.SaveFileMetadata(directory, savedFile.Filename, user.ID, user.Username); err != nil {
 		slog.Warn("メタデータの保存に失敗しました", "error", err)
 	}
 
 	slog.Info("ファイルアップロード成功", "user_id", user.ID, "filename", header.Filename, "directory", directory, "size", header.Size)
 
-	// SSEでブロードキャスト
 	if h.sseHandler != nil {
 		h.sseHandler.BroadcastFileUpload(user, directory, savedFile.Filename, savedFile.Size)
 	}
@@ -142,20 +135,17 @@ func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ディレクトリパス取得
 	directory := r.URL.Query().Get("directory")
 	if directory == "" {
 		http.Error(w, "ディレクトリが指定されていません", http.StatusBadRequest)
 		return
 	}
 
-	// パストラバーサル対策
 	directory, ok = cleanDir(w, directory)
 	if !ok {
 		return
 	}
 
-	// 権限チェック
 	hasPermission, err := h.permissionChecker.CheckPermission(user.ID, directory, "read")
 	if err != nil {
 		slog.Error("権限チェックエラー", "error", err)
@@ -167,7 +157,6 @@ func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ファイル一覧取得
 	files, err := h.storageManager.ListFiles(directory)
 	if err != nil {
 		slog.Error("ファイル一覧取得エラー", "error", err)
@@ -195,7 +184,6 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 権限チェック
 	hasPermission, err := h.permissionChecker.CheckPermission(user.ID, directory, "read")
 	if err != nil {
 		slog.Error("権限チェックエラー", "error", err)
@@ -207,10 +195,8 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ファイルパス構築
 	filePath := filepath.Join(h.config.Storage.UploadPath, directory, filename)
 
-	// ファイル存在チェック
 	// #nosec G703 - directory/filename は decodePathParams で ".." を除去済み
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
@@ -223,7 +209,6 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ファイルオープン
 	// #nosec G304,G703 - filePath は decodePathParams で検証済みの入力から構築される
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -237,14 +222,13 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Range Requestのサポート
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 
 	rangeHeader := r.Header.Get("Range")
 	if rangeHeader != "" {
-		// Range Requestの処理
+		// 単一レンジのみ対応する（複数レンジ/multipartは未サポート）。
 		ranges, err := parseRange(rangeHeader, fileInfo.Size())
 		if err != nil || len(ranges) != 1 {
 			http.Error(w, "無効なRangeヘッダーです", http.StatusRequestedRangeNotSatisfiable)
@@ -264,7 +248,6 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 			slog.Error("ファイル転送に失敗しました", "error", err)
 		}
 	} else {
-		// 通常のダウンロード
 		w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
 		if _, err := io.Copy(w, file); err != nil {
 			slog.Error("ファイル転送に失敗しました", "error", err)
@@ -273,7 +256,6 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("ファイルダウンロード", "user_id", user.ID, "filename", filename, "directory", directory)
 
-	// SSEでブロードキャスト
 	if h.sseHandler != nil {
 		h.sseHandler.BroadcastFileDownload(user, directory, filename)
 	}
@@ -292,7 +274,6 @@ func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 権限チェック
 	hasPermission, err := h.permissionChecker.CheckPermission(user.ID, directory, "delete")
 	if err != nil {
 		slog.Error("権限チェックエラー", "error", err)
@@ -304,7 +285,6 @@ func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ファイル削除
 	if err := h.storageManager.DeleteFile(directory, filename); err != nil {
 		slog.Error("ファイル削除エラー", "error", err)
 		http.Error(w, "ファイルの削除に失敗しました", http.StatusInternalServerError)
@@ -332,7 +312,6 @@ func (h *FileHandler) ListDirectories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ユーザーがアクセス可能なディレクトリを取得
 	accessibleDirs, err := h.permissionChecker.GetAccessibleDirectories(user.ID)
 	if err != nil {
 		slog.Error("アクセス可能ディレクトリ取得エラー", "error", err)
@@ -340,7 +319,6 @@ func (h *FileHandler) ListDirectories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// レスポンス用のディレクトリ情報を構築
 	directories := make([]map[string]interface{}, 0, len(accessibleDirs))
 	for _, dir := range accessibleDirs {
 		directories = append(directories, map[string]interface{}{

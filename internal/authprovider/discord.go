@@ -260,7 +260,7 @@ func (p *DiscordProvider) fetchMemberLive(ctx context.Context, subject string) (
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		// 正常処理
+		// この後でメンバー情報をパースする（下の共通処理へ抜ける）。
 	case http.StatusNotFound:
 		// ギルドに存在しない（退出済み等）。在籍なしとしてキャッシュする。
 		p.cacheMutex.Lock()

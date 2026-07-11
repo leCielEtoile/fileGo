@@ -59,7 +59,6 @@ type UploadSessionInfo struct {
 func (h *AdminHandler) GetUploadSessions(w http.ResponseWriter, r *http.Request) {
 	sessions := h.uploadManager.GetAllUploadSessions()
 
-	// レスポンス用の形式に変換
 	infos := make([]UploadSessionInfo, 0, len(sessions))
 	for _, session := range sessions {
 		progress := float64(len(session.UploadedChunks)) / float64(session.TotalChunks) * 100
@@ -88,7 +87,6 @@ func (h *AdminHandler) GetUploadSessions(w http.ResponseWriter, r *http.Request)
 func (h *AdminHandler) GetUploadStats(w http.ResponseWriter, r *http.Request) {
 	sessions := h.uploadManager.GetAllUploadSessions()
 
-	// ユーザー別のアップロード数を集計
 	userUploads := make(map[string]int)
 	var totalSize int64
 	var totalUploadedSize int64
@@ -97,7 +95,7 @@ func (h *AdminHandler) GetUploadStats(w http.ResponseWriter, r *http.Request) {
 		userUploads[session.UserID]++
 		totalSize += session.TotalSize
 
-		// アップロード済みサイズを計算
+		// 末尾チャンクは端数のため、チャンク数×サイズが総サイズを超え得る。総サイズで頭打ちにする。
 		uploadedSize := int64(len(session.UploadedChunks)) * session.ChunkSize
 		if uploadedSize > session.TotalSize {
 			uploadedSize = session.TotalSize

@@ -40,10 +40,9 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	// Cloudflare対策: X-Accel-Buffering を無効化してバッファリングを防ぐ
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	// クライアントチャンネル作成
+	// バッファ付きにして、遅い/切断済みクライアントがbroadcastをブロックしないようにする。
 	clientChan := make(chan SSEEvent, 10)
 
-	// クライアント登録
 	h.mu.Lock()
 	h.clients[clientChan] = true
 	clientCount := len(h.clients)
@@ -51,7 +50,6 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("SSE client connected", "total_clients", clientCount)
 
-	// 接続確立メッセージ
 	if _, err := fmt.Fprintf(w, "data: {\"message\": \"connected\"}\n\n"); err != nil {
 		slog.Error("SSE write error", "error", err)
 		return
@@ -60,19 +58,15 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 		f.Flush()
 	}
 
-	// コンテキストのキャンセルを監視
 	ctx := r.Context()
 
-	// ハートビート（15秒ごと - Cloudflareの100秒タイムアウト対策）
-	// Cloudflareは100秒で接続を切断するため、それより短い間隔で送信
+	// Cloudflareは100秒で無通信接続を切るため、それより短い間隔でハートビートを送る。
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
-	// クライアントにイベントを送信
 	for {
 		select {
 		case <-ctx.Done():
-			// クライアント切断
 			h.mu.Lock()
 			delete(h.clients, clientChan)
 			clientCount := len(h.clients)
@@ -82,7 +76,6 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case event := <-clientChan:
-			// イベント送信
 			jsonData, err := json.Marshal(event.Data)
 			if err != nil {
 				slog.Error("JSON marshal error", "error", err)
@@ -98,7 +91,6 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case <-ticker.C:
-			// ハートビート送信
 			if _, err := fmt.Fprintf(w, ": heartbeat\n\n"); err != nil {
 				slog.Error("SSE write error", "error", err)
 				return
@@ -173,9 +165,8 @@ func (h *SSEHandler) broadcast(event SSEEvent) {
 	for clientChan := range h.clients {
 		select {
 		case clientChan <- event:
-			// 送信成功
 		default:
-			// チャンネルがいっぱいの場合はスキップ
+			// 詰まっているクライアントで全体をブロックしないよう、送れなければ捨てる。
 			slog.Warn("SSE client channel full, skipping event", "event_type", event.Type)
 		}
 	}

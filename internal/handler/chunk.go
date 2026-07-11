@@ -71,19 +71,16 @@ func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// バリデーション
 	if req.Filename == "" || req.Directory == "" || req.FileSize <= 0 || req.ChunkSize <= 0 {
 		http.Error(w, "必須パラメータが不足しています", http.StatusBadRequest)
 		return
 	}
 
-	// パストラバーサル対策
 	req.Directory, ok = cleanDir(w, req.Directory)
 	if !ok {
 		return
 	}
 
-	// 権限チェック
 	hasPermission, err := h.permissionChecker.CheckPermission(user.ID, req.Directory, "write")
 	if err != nil {
 		slog.Error("権限チェックエラー", "error", err)
@@ -95,7 +92,7 @@ func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// userディレクトリの場合、ユーザー個別ディレクトリを自動作成
+	// user配下は初回アップロード時に個別ディレクトリを作る（事前作成しない方針）。
 	if strings.HasPrefix(req.Directory, "user/") {
 		if ensureErr := h.storageManager.EnsureUserDirectory(user.GetDirectoryName()); ensureErr != nil {
 			slog.Error("ユーザーディレクトリ作成エラー", "error", ensureErr)
@@ -104,7 +101,7 @@ func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// アップロードセッション初期化
+	// 切り上げ除算でチャンク数を求める。
 	totalChunks := int((req.FileSize + req.ChunkSize - 1) / req.ChunkSize)
 	session, err := h.uploadManager.CreateUploadSession(
 		user.ID,
@@ -147,7 +144,7 @@ func (h *ChunkHandler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// セッションを取得し所有者を照合する（ボディ読み取り前に上限も決定する）
+	// ボディ読み取り前にセッションを引く（所有者照合とMaxBytesReaderの上限決定のため）。
 	session, err := h.uploadManager.GetUploadSession(uploadID)
 	if err != nil {
 		writeChunkError(w, err)
@@ -158,17 +155,15 @@ func (h *ChunkHandler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ボディサイズを1チャンク分に制限し、巨大リクエストによるメモリ枯渇を防ぐ
+	// ReadAllで全体を読むため、1チャンク分でボディを打ち切りメモリ枯渇を防ぐ。
 	r.Body = http.MaxBytesReader(w, r.Body, session.ChunkSize)
 
-	// チャンクデータを読み取り
 	chunkData, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "チャンクデータが大きすぎるか読み取りに失敗しました", http.StatusBadRequest)
 		return
 	}
 
-	// チャンクを保存
 	if err := h.uploadManager.SaveChunk(uploadID, user.ID, chunkIndex, chunkData); err != nil {
 		slog.Error("チャンク保存エラー", "upload_id", uploadID, "chunk_index", chunkIndex, "error", err)
 		writeChunkError(w, err)
@@ -198,7 +193,6 @@ func (h *ChunkHandler) GetChunkStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 所有者照合（他ユーザーのセッション情報を参照させない）
 	if session.UserID != user.ID {
 		http.Error(w, "このアップロードセッションを操作する権限がありません", http.StatusForbidden)
 		return
@@ -234,10 +228,9 @@ func (h *ChunkHandler) CompleteChunkUpload(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// ディレクトリとファイル名を抽出
 	directory := filepath.Dir(savedFile.Path)
 
-	// メタデータを保存
+	// メタデータ保存の失敗は完了を失敗させない（本体は保存済み）。
 	if err := h.storageManager.SaveFileMetadata(directory, savedFile.Filename, user.ID, user.Username); err != nil {
 		slog.Warn("メタデータの保存に失敗しました", "error", err)
 	}

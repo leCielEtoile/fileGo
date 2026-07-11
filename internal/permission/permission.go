@@ -47,11 +47,9 @@ func NewChecker(cfg *config.Config, provider authprovider.Provider, sm *storage.
 // directory: ディレクトリパス（例: "user", "user/alice", "public", "admin"）
 // permission: 権限タイプ（"read", "write", "delete"）
 func (pc *Checker) CheckPermission(userID, directory, permission string) (bool, error) {
-	// ディレクトリパスを分解
 	pathParts := strings.Split(directory, "/")
 	rootDir := pathParts[0]
 
-	// ディレクトリ設定を取得
 	dirConfig := pc.config.GetDirectoryConfig(rootDir)
 	if dirConfig == nil {
 		return false, fmt.Errorf("ディレクトリ '%s' の設定が見つかりません", rootDir)
@@ -68,20 +66,18 @@ func (pc *Checker) CheckPermission(userID, directory, permission string) (bool, 
 		return true, nil
 	}
 
-	// ユーザーのロールを取得
 	userRoles, err := pc.provider.GetUserRoles(context.Background(), userID)
 	if err != nil {
 		slog.Error("ユーザーロール取得エラー", "user_id", userID, "error", err)
 		return false, fmt.Errorf("ユーザーロールの取得に失敗しました: %w", err)
 	}
 
-	// 管理者ロールを持つ場合は全操作を許可
+	// 管理者ロールは全ディレクトリ・全操作を許可する。
 	if pc.config.HasAdminRole(userRoles) {
 		slog.Debug("管理者権限によるアクセス許可", "user_id", userID, "directory", directory)
 		return true, nil
 	}
 
-	// ロールにマッチする付与を評価
 	return dirConfig.RolePermissions(toSet(userRoles))[permission], nil
 }
 
@@ -94,22 +90,18 @@ func (pc *Checker) checkUserPrivatePermission(userID, permission string, pathPar
 		return permission == "read", nil
 	}
 
-	// /user/{targetUserDirName} の場合 (targetUserDirName is username)
+	// /user/{targetUserDirName}: 本人か管理者のみ許可し、それ以外は拒否する。
 	if len(pathParts) >= 2 {
 		targetUserDirName := pathParts[1]
 
-		// 自分のディレクトリ名を取得
 		myDirName, err := pc.getUserDirectoryName(userID)
 		if err != nil {
 			return false, err
 		}
-
-		// 本人の場合はアクセス許可
 		if targetUserDirName == myDirName {
 			return pc.allowUserDirectoryAccess(myDirName, permission), nil
 		}
 
-		// 管理者の場合はすべてのユーザーディレクトリにアクセス許可
 		isAdmin, err := pc.isAdmin(userID)
 		if err != nil {
 			return false, err
@@ -118,7 +110,6 @@ func (pc *Checker) checkUserPrivatePermission(userID, permission string, pathPar
 			return pc.allowUserDirectoryAccess(targetUserDirName, permission), nil
 		}
 
-		// 本人でも管理者でもない場合はアクセス拒否
 		return false, nil
 	}
 

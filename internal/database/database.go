@@ -34,7 +34,6 @@ func Initialize(dbPath string, maxConns int) (*sql.DB, error) {
 		return nil, fmt.Errorf("データベース接続エラー: %w", err)
 	}
 
-	// テーブル作成
 	if err := createTables(db); err != nil {
 		if closeErr := db.Close(); closeErr != nil {
 			return nil, fmt.Errorf("テーブル作成エラー: %w (クローズエラー: %w)", err, closeErr)

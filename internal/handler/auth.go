@@ -67,7 +67,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	p := h.provider
 	providerName := p.Name()
 
-	// state検証
+	// stateはLoginで発行しCookieに保存した値と一致すること（CSRF対策）。
 	stateCookie, err := r.Cookie("oauth_state")
 	if err != nil {
 		http.Error(w, "無効なリクエストです", http.StatusBadRequest)
@@ -80,14 +80,12 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 認証コード取得
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		http.Error(w, "認証コードが見つかりません", http.StatusBadRequest)
 		return
 	}
 
-	// トークン交換
 	token, err := p.Exchange(r.Context(), code)
 	if err != nil {
 		slog.Error("トークン交換エラー", "error", err, "provider", providerName)
@@ -95,7 +93,6 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ユーザー情報取得
 	userInfo, err := p.FetchUserInfo(r.Context(), token)
 	if err != nil {
 		slog.Error("ユーザー情報取得エラー", "error", err, "provider", providerName)
@@ -118,7 +115,6 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// 認証プロバイダーは1つに限定しているため、ユーザーIDはsubject単体で一意になる。
 	userID := userInfo.Subject
 
-	// ユーザー登録/更新
 	if upsertErr := h.upsertUser(userID, userInfo); upsertErr != nil {
 		slog.Error("ユーザー登録エラー", "error", upsertErr)
 		http.Error(w, "ユーザー登録に失敗しました", http.StatusInternalServerError)
@@ -137,12 +133,11 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// セッション作成
 	sessionToken := generateRandomString(64)
-	expiresAt := time.Now().Add(7 * 24 * time.Hour) // 7日間有効
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
-	// プロバイダーのアクセストークン/リフレッシュトークンはログイン処理内でのみ使用し、
-	// このアプリはログイン後に再利用しないためDBには保存しない。
+	// プロバイダーのアクセストークン/リフレッシュトークンはログイン後に再利用しないため
+	// DBには保存しない（漏洩面を減らす）。
 	ctx := context.Background()
 	_, err = h.db.ExecContext(ctx, `
 		INSERT INTO sessions (session_token, user_id, provider, expires_at)
@@ -154,7 +149,6 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// セッションクッキー設定
 	// #nosec G124 - Secureは設定(SecureCookie)由来。HttpOnly/SameSiteも設定済み
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
@@ -162,13 +156,12 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  expiresAt,
 		HttpOnly: true,
-		Secure:   h.config.Server.SecureCookie, // HTTPS環境でのみ有効化
-		SameSite: http.SameSiteLaxMode,         // Strictは外部IdPからのリダイレクトでクッキーが送出されない
+		Secure:   h.config.Server.SecureCookie,
+		SameSite: http.SameSiteLaxMode, // Strictだと外部IdPからのリダイレクトでCookieが送出されない
 	})
 
 	slog.Info("ユーザーがログインしました", "user_id", userID, "username", userInfo.Username, "provider", providerName)
 
-	// SSEでブロードキャスト
 	if h.sseHandler != nil {
 		user := &models.User{
 			ID:       userID,
@@ -186,14 +179,12 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_token")
 	if err == nil {
-		// セッション削除
 		ctx := context.Background()
 		if _, err := h.db.ExecContext(ctx, "DELETE FROM sessions WHERE session_token = ?", cookie.Value); err != nil {
 			slog.Error("セッション削除に失敗しました", "error", err)
 		}
 	}
 
-	// クッキー削除
 	// #nosec G124 - Secureは設定(SecureCookie)由来。HttpOnly/SameSiteも設定済み
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
@@ -233,13 +224,12 @@ func (h *AuthHandler) upsertUser(userID string, info *authprovider.UserInfo) err
 }
 
 func generateRandomString(length int) string {
-	// 必要な文字数を確実に満たすだけのランダムバイトを生成する。
-	// base64は3バイト→4文字に符号化するため、length分の文字を得るには
-	// ceil(length*3/4) バイトあれば足りるが、余裕を持って length バイト読む。
+	// base64符号化はバイト数より長い文字列になるため、length バイト読めば
+	// 末尾を[:length]で切り出しても足りる。
 	bytes := make([]byte, length)
 	if _, err := rand.Read(bytes); err != nil {
-		// フォールバック: タイムスタンプベースの文字列生成。
-		// 短い入力を[:length]で切り出すとパニックするため、必要長まで繰り返して埋める。
+		// フォールバックのseedがlengthより短いと[:length]でパニックするため、
+		// 必要長まで繰り返して埋める。
 		slog.Error("暗号乱数の生成に失敗しました。フォールバックを使用します", "error", err)
 		seed := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
 		for len(seed) < length {

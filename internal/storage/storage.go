@@ -44,15 +44,12 @@ func NewManager(cfg *config.Config, db *sql.DB) *Manager {
 // InitializeDirectories は設定ファイルで定義されたすべてのディレクトリを作成します。
 // ルートアップロードディレクトリと、安全な権限を持つすべての設定されたサブディレクトリを作成します。
 func (m *Manager) InitializeDirectories() error {
-	// アップロードルートディレクトリ作成
 	if err := os.MkdirAll(m.config.Storage.UploadPath, 0750); err != nil {
 		return fmt.Errorf("アップロードディレクトリの作成に失敗しました: %w", err)
 	}
 
-	// 設定ファイルで定義された各ディレクトリを作成
 	for _, dir := range m.config.Storage.Directories {
-		// user_private タイプの場合は親ディレクトリのみ作成
-		// ユーザー個別ディレクトリは初回アクセス時に作成
+		// user_privateは親のみ作る。ユーザー個別ディレクトリは初回アクセス時に作成する。
 		dirPath := filepath.Join(m.config.Storage.UploadPath, dir.Path)
 		if err := os.MkdirAll(dirPath, 0750); err != nil {
 			return fmt.Errorf("ディレクトリ '%s' の作成に失敗しました: %w", dir.Path, err)
@@ -85,14 +82,12 @@ func (m *Manager) UserDirectoryExists(directoryName string) bool {
 // SaveFile はファイルを一意のUUIDベースのファイル名で指定されたディレクトリに保存します。
 // 生成されたファイル名、パス、サイズを含む保存されたファイルのメタデータを返します。
 func (m *Manager) SaveFile(file io.Reader, filename, directory string) (*SavedFile, error) {
-	// ファイル名生成（UUID + 元のファイル名）
+	// 元ファイル名の衝突を避けるためUUIDを前置する。表示名はextractOriginalFilenameで復元する。
 	fileID := uuid.New().String()
 	savedFilename := fmt.Sprintf("%s_%s", fileID, sanitizeFilename(filename))
 
-	// 保存先パス
 	destPath := filepath.Join(m.config.Storage.UploadPath, directory, savedFilename)
 
-	// ファイル作成
 	// #nosec G304 - destPath is constructed from sanitized inputs
 	destFile, err := os.Create(destPath)
 	if err != nil {
@@ -104,7 +99,6 @@ func (m *Manager) SaveFile(file io.Reader, filename, directory string) (*SavedFi
 		}
 	}()
 
-	// データコピー
 	written, err := io.Copy(destFile, file)
 	if err != nil {
 		if removeErr := os.Remove(destPath); removeErr != nil {
@@ -137,9 +131,7 @@ func (m *Manager) ListFiles(directory string) ([]models.FileInfo, error) {
 			continue
 		}
 
-		// ディレクトリの場合
 		if entry.IsDir() {
-			// サブディレクトリの相対パスを構築
 			subDirPath := entry.Name()
 			if directory != "" {
 				subDirPath = filepath.Join(directory, entry.Name())
@@ -156,21 +148,18 @@ func (m *Manager) ListFiles(directory string) ([]models.FileInfo, error) {
 			continue
 		}
 
-		// .temp, .metaファイルは除外
+		// アップロード途中の作業ファイルは一覧に見せない。
 		if strings.HasSuffix(entry.Name(), ".temp") || strings.HasSuffix(entry.Name(), ".meta") {
 			continue
 		}
 
-		// 元のファイル名を抽出
 		originalName := extractOriginalFilename(entry.Name())
 
-		// メタデータを取得
 		uploader, hash, err := m.GetFileMetadata(directory, entry.Name())
 		if err != nil {
 			slog.Warn("メタデータの取得に失敗しました", "filename", entry.Name(), "error", err)
 		}
 
-		// ファイルの相対パスを構築
 		filePath := entry.Name()
 		if directory != "" {
 			filePath = filepath.Join(directory, entry.Name())
@@ -199,10 +188,9 @@ func (m *Manager) DeleteFile(directory, filename string) error {
 
 // sanitizeFilename はパストラバーサルを防ぐためファイル名から危険な要素を除去します。
 func sanitizeFilename(filename string) string {
-	// パストラバーサル対策
+	// Baseでパス要素を落としたうえで、残る区切り文字と".."を無害化する。
 	filename = filepath.Base(filename)
 
-	// 危険な文字を置換
 	replacer := strings.NewReplacer(
 		"..", "_",
 		"/", "_",
@@ -227,11 +215,11 @@ func (m *Manager) SaveFileMetadata(directory, filename, uploaderID, uploaderName
 		return fmt.Errorf("データベース接続が設定されていません")
 	}
 
-	// ファイルのハッシュ値を計算
+	// ハッシュ計算の失敗はメタデータ保存を止めない（hashは空のまま続行）。
 	hash, err := m.calculateFileHash(directory, filename)
 	if err != nil {
 		slog.Warn("ファイルハッシュの計算に失敗しました", "error", err)
-		hash = "" // ハッシュ計算失敗時は空文字列
+		hash = ""
 	}
 
 	query := `
