@@ -87,6 +87,16 @@ func RealIP(behindProxy bool, trustedProxies []string) func(http.Handler) http.H
 	}
 }
 
+// tokenPrefix はセッショントークンの先頭一部だけをログ用に安全に取り出します。
+// トークンが短い場合でもスライス範囲外パニックを起こさないようにします。
+func tokenPrefix(token string) string {
+	const n = 10
+	if len(token) <= n {
+		return "..."
+	}
+	return token[:n] + "..."
+}
+
 // isTrustedProxy はIPが信頼されたプロキシかどうかをチェックします。
 func isTrustedProxy(ip string, trustedProxies []string) bool {
 	parsedIP := net.ParseIP(ip)
@@ -121,7 +131,7 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB, provider authprovider.Provid
 				return
 			}
 
-			slog.Debug("認証Cookie検出", "path", r.URL.Path, "token_prefix", cookie.Value[:10]+"...")
+			slog.Debug("認証Cookie検出", "path", r.URL.Path, "token_prefix", tokenPrefix(cookie.Value))
 
 			// Validate session
 			var session models.Session
@@ -133,7 +143,7 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB, provider authprovider.Provid
 
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
-					slog.Debug("無効または期限切れセッション", "token_prefix", cookie.Value[:10]+"...")
+					slog.Debug("無効または期限切れセッション", "token_prefix", tokenPrefix(cookie.Value))
 					http.Error(w, "invalid session", http.StatusUnauthorized)
 					return
 				}

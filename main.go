@@ -125,7 +125,7 @@ func main() {
 	}
 
 	// データベース初期化
-	db, err := database.Initialize(cfg.Database.Path)
+	db, err := database.Initialize(cfg.Database.Path, cfg.Database.MaxConnections)
 	if err != nil {
 		slog.Error("データベースの初期化に失敗しました", "error", err)
 		os.Exit(1)
@@ -250,12 +250,16 @@ func main() {
 		r.Get("/files/download/{directory}/{filename}", fileHandler.Download)
 		r.Delete("/files/{directory}/{filename}", fileHandler.DeleteFile)
 
-		// チャンクアップロード
-		r.Post("/files/chunk/init", chunkHandler.InitChunkUpload)
-		r.Post("/files/chunk/upload/{upload_id}", chunkHandler.UploadChunk)
-		r.Get("/files/chunk/status/{upload_id}", chunkHandler.GetChunkStatus)
-		r.Post("/files/chunk/complete/{upload_id}", chunkHandler.CompleteChunkUpload)
-		r.Delete("/files/chunk/cancel/{upload_id}", chunkHandler.CancelChunkUpload)
+		// チャンクアップロード（設定で有効化されている場合のみ登録）
+		if cfg.Storage.ChunkUploadEnabled {
+			r.Post("/files/chunk/init", chunkHandler.InitChunkUpload)
+			r.Post("/files/chunk/upload/{upload_id}", chunkHandler.UploadChunk)
+			r.Get("/files/chunk/status/{upload_id}", chunkHandler.GetChunkStatus)
+			r.Post("/files/chunk/complete/{upload_id}", chunkHandler.CompleteChunkUpload)
+			r.Delete("/files/chunk/cancel/{upload_id}", chunkHandler.CancelChunkUpload)
+		} else {
+			slog.Info("チャンクアップロードは無効化されています（storage.chunk_upload_enabled=false）")
+		}
 
 		// 管理者専用エンドポイント
 		r.Group(func(r chi.Router) {

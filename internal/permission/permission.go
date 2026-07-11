@@ -88,9 +88,10 @@ func (pc *Checker) CheckPermission(userID, directory, permission string) (bool, 
 // checkUserPrivatePermission はuser_privateディレクトリへの権限を判定します。
 // /user 直下は一覧のみ許可し、/user/{name} は本人または管理者にのみアクセスを許可します。
 func (pc *Checker) checkUserPrivatePermission(userID, permission string, pathParts []string) (bool, error) {
-	// /user 直下の場合は、自分のディレクトリのみ見える
+	// /user 直下は一覧表示（read）のみを許可する。
+	// 共有の親ディレクトリへ直接書き込み・削除させないため、read以外は拒否する。
 	if len(pathParts) == 1 {
-		return true, nil
+		return permission == "read", nil
 	}
 
 	// /user/{targetUserDirName} の場合 (targetUserDirName is username)

@@ -36,7 +36,7 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// 認証必須の同一オリジンendpointのためワイルドカードCORSは付与しない。
 	// Cloudflare対策: X-Accel-Buffering を無効化してバッファリングを防ぐ
 	w.Header().Set("X-Accel-Buffering", "no")
 

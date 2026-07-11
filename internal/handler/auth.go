@@ -233,10 +233,19 @@ func (h *AuthHandler) upsertUser(userID string, info *authprovider.UserInfo) err
 }
 
 func generateRandomString(length int) string {
+	// 必要な文字数を確実に満たすだけのランダムバイトを生成する。
+	// base64は3バイト→4文字に符号化するため、length分の文字を得るには
+	// ceil(length*3/4) バイトあれば足りるが、余裕を持って length バイト読む。
 	bytes := make([]byte, length)
 	if _, err := rand.Read(bytes); err != nil {
-		// フォールバック: タイムスタンプベースの文字列生成
-		return base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))[:length]
+		// フォールバック: タイムスタンプベースの文字列生成。
+		// 短い入力を[:length]で切り出すとパニックするため、必要長まで繰り返して埋める。
+		slog.Error("暗号乱数の生成に失敗しました。フォールバックを使用します", "error", err)
+		seed := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+		for len(seed) < length {
+			seed += seed
+		}
+		return seed[:length]
 	}
 	return base64.URLEncoding.EncodeToString(bytes)[:length]
 }

@@ -49,6 +49,11 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// リクエストボディを最大ファイルサイズ + マルチパートのオーバーヘッド分に制限する。
+	// FormValue/FormFile がボディをパースする前に設定する必要がある。
+	const multipartOverhead = 1 << 20 // 1MB（境界・フォームフィールド用の余裕）
+	r.Body = http.MaxBytesReader(w, r.Body, h.config.Storage.MaxFileSize+multipartOverhead)
+
 	// ディレクトリパス取得
 	directory := r.FormValue("directory")
 	if directory == "" {

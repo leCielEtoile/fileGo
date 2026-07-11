@@ -26,6 +26,12 @@ var (
 	ErrMaxConcurrentUploads = errors.New("同時アップロード数の上限に達しています")
 	// ErrIncompleteUpload はチャンクが不足したままアップロードを完了しようとした場合に返されます
 	ErrIncompleteUpload = errors.New("アップロードが完了していません")
+	// ErrPermissionDenied は他ユーザーのアップロードセッションを操作しようとした場合に返されます
+	ErrPermissionDenied = errors.New("このアップロードセッションを操作する権限がありません")
+	// ErrInvalidChunk はチャンク番号やサイズが不正な場合に返されます
+	ErrInvalidChunk = errors.New("チャンクの指定が不正です")
+	// ErrSizeMismatch は完了時の実サイズが宣言サイズと一致しない場合に返されます
+	ErrSizeMismatch = errors.New("アップロードされたファイルサイズが宣言と一致しません")
 )
 
 // UploadManager は同時アップロード制限とクリーンアップを備えたチャンク分割ファイルアップロードセッションを管理します。
@@ -64,6 +70,18 @@ func (um *UploadManager) CreateUploadSession(userID, filename, directory string,
 	// ファイルサイズチェック
 	if totalSize > um.config.Storage.MaxChunkFileSize {
 		return nil, fmt.Errorf("ファイルサイズが上限を超えています")
+	}
+
+	// チャンクサイズの妥当性チェック。
+	// 1チャンクあたりの受信上限（MaxBytesReader）に直結するため、
+	// クライアント指定のchunkSizeがファイルサイズ上限を超えないことを保証する。
+	// また極端に小さいchunkSizeによる過大なチャンク数（メモリ枯渇）も防ぐ。
+	if chunkSize <= 0 || chunkSize > um.config.Storage.MaxChunkFileSize {
+		return nil, fmt.Errorf("チャンクサイズが不正です")
+	}
+	const maxChunks = 100000
+	if totalChunks <= 0 || totalChunks > maxChunks {
+		return nil, fmt.Errorf("チャンク数が上限を超えています")
 	}
 
 	uploadID := uuid.New().String()
@@ -123,7 +141,8 @@ func (um *UploadManager) GetUploadSession(uploadID string) (*models.UploadSessio
 
 // SaveChunk はデータのチャンクを一時ファイルの適切なオフセットに保存します。
 // アップロード済みチャンクを追跡し、セッションメタデータを更新します。
-func (um *UploadManager) SaveChunk(uploadID string, chunkNumber int, data []byte) error {
+// userID はセッション所有者との照合に使用します（他ユーザーからの書き込みを拒否）。
+func (um *UploadManager) SaveChunk(uploadID, userID string, chunkNumber int, data []byte) error {
 	um.mu.Lock()
 	defer um.mu.Unlock()
 
@@ -132,6 +151,27 @@ func (um *UploadManager) SaveChunk(uploadID string, chunkNumber int, data []byte
 		return ErrSessionNotFound
 	}
 	um.sessions[uploadID] = session
+
+	// 所有者照合（他ユーザーのセッションへの書き込みを拒否）
+	if session.UserID != userID {
+		return ErrPermissionDenied
+	}
+
+	// チャンク番号の範囲チェック（任意オフセットへのスパースファイル生成を防ぐ）
+	if chunkNumber < 0 || chunkNumber >= session.TotalChunks {
+		return ErrInvalidChunk
+	}
+
+	// チャンクサイズの上限チェック（1チャンクが宣言サイズを超えないこと）
+	if int64(len(data)) > session.ChunkSize {
+		return ErrInvalidChunk
+	}
+
+	// 書き込み終端が宣言済みの総サイズを超えないこと（末尾チャンクは端数を許容）
+	offset := int64(chunkNumber) * session.ChunkSize
+	if offset+int64(len(data)) > session.TotalSize {
+		return ErrInvalidChunk
+	}
 
 	// 既にアップロード済みかチェック
 	for _, uploaded := range session.UploadedChunks {
@@ -153,8 +193,7 @@ func (um *UploadManager) SaveChunk(uploadID string, chunkNumber int, data []byte
 		}
 	}()
 
-	// チャンクの位置にシーク
-	offset := int64(chunkNumber) * session.ChunkSize
+	// チャンクの位置にシーク（offsetは上で算出済み）
 	if _, err := file.Seek(offset, 0); err != nil {
 		return err
 	}
@@ -187,7 +226,8 @@ func (um *UploadManager) GetUploadedChunks(uploadID string) ([]int, error) {
 
 // CompleteUpload は一時ファイルをリネームしてメタデータをクリーンアップすることでアップロードを完了します。
 // 完了前にすべてのチャンクがアップロード済みであることを検証します。
-func (um *UploadManager) CompleteUpload(uploadID string) (*SavedFile, error) {
+// userID はセッション所有者との照合に使用します。
+func (um *UploadManager) CompleteUpload(uploadID, userID string) (*SavedFile, error) {
 	um.mu.Lock()
 	defer um.mu.Unlock()
 
@@ -196,13 +236,25 @@ func (um *UploadManager) CompleteUpload(uploadID string) (*SavedFile, error) {
 		return nil, ErrSessionNotFound
 	}
 
+	// 所有者照合
+	if session.UserID != userID {
+		return nil, ErrPermissionDenied
+	}
+
 	// 全チャンクがアップロード済みか確認
 	if len(session.UploadedChunks) != session.TotalChunks {
 		return nil, ErrIncompleteUpload
 	}
 
-	// .tempファイルを最終ファイルにリネーム
+	// 実ファイルサイズが宣言済みの総サイズと一致するか確認（完全性チェック）
 	tempPath := um.getTempFilePath(uploadID, session.Filename, session.Directory)
+	if info, statErr := os.Stat(tempPath); statErr != nil {
+		return nil, statErr
+	} else if info.Size() != session.TotalSize {
+		return nil, ErrSizeMismatch
+	}
+
+	// .tempファイルを最終ファイルにリネーム
 	fileID := uuid.New().String()
 	finalFilename := fmt.Sprintf("%s_%s", fileID, sanitizeFilename(session.Filename))
 	finalPath := filepath.Join(um.config.Storage.UploadPath, session.Directory, finalFilename)
@@ -235,13 +287,19 @@ func (um *UploadManager) CompleteUpload(uploadID string) (*SavedFile, error) {
 }
 
 // CancelUpload はアップロードセッションをキャンセルし、関連するすべてのファイルを削除します。
-func (um *UploadManager) CancelUpload(uploadID string) error {
+// userID はセッション所有者との照合に使用します。
+func (um *UploadManager) CancelUpload(uploadID, userID string) error {
 	um.mu.Lock()
 	defer um.mu.Unlock()
 
 	session, err := um.findSession(uploadID)
 	if err != nil {
 		return ErrSessionNotFound
+	}
+
+	// 所有者照合
+	if session.UserID != userID {
+		return ErrPermissionDenied
 	}
 
 	um.removeSession(uploadID, session)

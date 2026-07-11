@@ -4,6 +4,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,23 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
+
+// writeChunkError はストレージ層のエラーを適切なHTTPステータスに変換して応答します。
+func writeChunkError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, storage.ErrSessionNotFound):
+		http.Error(w, err.Error(), http.StatusNotFound)
+	case errors.Is(err, storage.ErrPermissionDenied):
+		http.Error(w, err.Error(), http.StatusForbidden)
+	case errors.Is(err, storage.ErrInvalidChunk),
+		errors.Is(err, storage.ErrIncompleteUpload),
+		errors.Is(err, storage.ErrSizeMismatch),
+		errors.Is(err, storage.ErrMaxConcurrentUploads):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	default:
+		http.Error(w, "内部エラーが発生しました", http.StatusInternalServerError)
+	}
+}
 
 // ChunkHandler はチャンク分割されたファイルアップロードのHTTPリクエストを処理します。
 type ChunkHandler struct {
@@ -115,6 +133,11 @@ func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
 
 // UploadChunk は進行中のアップロードのための単一のチャンクデータを受信して保存します。
 func (h *ChunkHandler) UploadChunk(w http.ResponseWriter, r *http.Request) {
+	user, ok := userFromContext(w, r)
+	if !ok {
+		return
+	}
+
 	uploadID := chi.URLParam(r, "upload_id")
 	chunkIndexStr := r.URL.Query().Get("chunk_index")
 
@@ -124,17 +147,31 @@ func (h *ChunkHandler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// セッションを取得し所有者を照合する（ボディ読み取り前に上限も決定する）
+	session, err := h.uploadManager.GetUploadSession(uploadID)
+	if err != nil {
+		writeChunkError(w, err)
+		return
+	}
+	if session.UserID != user.ID {
+		http.Error(w, "このアップロードセッションを操作する権限がありません", http.StatusForbidden)
+		return
+	}
+
+	// ボディサイズを1チャンク分に制限し、巨大リクエストによるメモリ枯渇を防ぐ
+	r.Body = http.MaxBytesReader(w, r.Body, session.ChunkSize)
+
 	// チャンクデータを読み取り
 	chunkData, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "チャンクデータの読み取りに失敗しました", http.StatusBadRequest)
+		http.Error(w, "チャンクデータが大きすぎるか読み取りに失敗しました", http.StatusBadRequest)
 		return
 	}
 
 	// チャンクを保存
-	if err := h.uploadManager.SaveChunk(uploadID, chunkIndex, chunkData); err != nil {
+	if err := h.uploadManager.SaveChunk(uploadID, user.ID, chunkIndex, chunkData); err != nil {
 		slog.Error("チャンク保存エラー", "upload_id", uploadID, "chunk_index", chunkIndex, "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeChunkError(w, err)
 		return
 	}
 
@@ -148,11 +185,22 @@ func (h *ChunkHandler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 
 // GetChunkStatus は進捗を含むチャンク分割アップロードの現在のステータスを返します。
 func (h *ChunkHandler) GetChunkStatus(w http.ResponseWriter, r *http.Request) {
+	user, ok := userFromContext(w, r)
+	if !ok {
+		return
+	}
+
 	uploadID := chi.URLParam(r, "upload_id")
 
 	session, err := h.uploadManager.GetUploadSession(uploadID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeChunkError(w, err)
+		return
+	}
+
+	// 所有者照合（他ユーザーのセッション情報を参照させない）
+	if session.UserID != user.ID {
+		http.Error(w, "このアップロードセッションを操作する権限がありません", http.StatusForbidden)
 		return
 	}
 
@@ -179,10 +227,10 @@ func (h *ChunkHandler) CompleteChunkUpload(w http.ResponseWriter, r *http.Reques
 
 	uploadID := chi.URLParam(r, "upload_id")
 
-	savedFile, err := h.uploadManager.CompleteUpload(uploadID)
+	savedFile, err := h.uploadManager.CompleteUpload(uploadID, user.ID)
 	if err != nil {
 		slog.Error("アップロード完了エラー", "upload_id", uploadID, "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeChunkError(w, err)
 		return
 	}
 
@@ -207,11 +255,16 @@ func (h *ChunkHandler) CompleteChunkUpload(w http.ResponseWriter, r *http.Reques
 
 // CancelChunkUpload は進行中のチャンク分割アップロードを中止し、一時ファイルをクリーンアップします。
 func (h *ChunkHandler) CancelChunkUpload(w http.ResponseWriter, r *http.Request) {
+	user, ok := userFromContext(w, r)
+	if !ok {
+		return
+	}
+
 	uploadID := chi.URLParam(r, "upload_id")
 
-	if err := h.uploadManager.CancelUpload(uploadID); err != nil {
+	if err := h.uploadManager.CancelUpload(uploadID, user.ID); err != nil {
 		slog.Error("アップロードキャンセルエラー", "upload_id", uploadID, "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeChunkError(w, err)
 		return
 	}
 

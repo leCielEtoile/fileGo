@@ -5,16 +5,29 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 
 	_ "modernc.org/sqlite"
 )
 
 // Initialize はデータベース接続を初期化し、テーブルが存在しない場合は作成します。
-func Initialize(dbPath string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", dbPath)
+// maxConns は最大接続数（0以下の場合は既定値を使用）です。
+func Initialize(dbPath string, maxConns int) (*sql.DB, error) {
+	// WAL と busy_timeout を有効化し、同時アクセス時の "database is locked" を軽減する。
+	// DSN の pragma はコネクションごとに適用される。
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)",
+		url.PathEscape(dbPath))
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("データベースオープンエラー: %w", err)
 	}
+
+	// 接続数の上限を設定する。未設定（0以下）の場合は安全側の既定値を使う。
+	if maxConns <= 0 {
+		maxConns = 10
+	}
+	db.SetMaxOpenConns(maxConns)
 
 	ctx := context.Background()
 	if err := db.PingContext(ctx); err != nil {
