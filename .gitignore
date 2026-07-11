@@ -100,3 +100,6 @@ pprof/
 
 # Node（Tailwind CSSビルド用）
 node_modules/
+
+# ローカルMCP設定（コミット対象外）
+.mcp.json
