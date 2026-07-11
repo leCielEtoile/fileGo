@@ -6,6 +6,7 @@ fileserver.exe
 config/config.yaml
 config.yaml
 .env
+.envrc
 *.db
 *.db-journal
 *.db-shm
@@ -96,3 +97,6 @@ pprof/
 
 # Claude Code
 .claude/
+
+# Node（Tailwind CSSビルド用）
+node_modules/

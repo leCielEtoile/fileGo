@@ -22,7 +22,7 @@ html {
 /* プログレスバーのアニメーション（Tailwindでは複雑） */
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #5865F2, #57F287);
+    background: linear-gradient(90deg, #1a73e8, #34a853);
     transition: width 0.3s ease-out;
     width: 0%;
 }

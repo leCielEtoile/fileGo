@@ -8,6 +8,16 @@
 # Dockerfile を変更せず --build-context で上書きできる。名前は下記 FROM の
 # 記述と完全一致させる必要がある。手順は docs/DEPLOYMENT.md を参照。
 
+# ---- CSSビルドステージ ----
+# Tailwind をランタイムのCDNで実行せず、ビルド時に静的CSSへコンパイルする。
+# テンプレートとJSを走査し、実際に使用されているクラスのみを含む最小CSSを生成する。
+FROM node:22-alpine AS webbuilder
+WORKDIR /web
+COPY package.json tailwind.config.js ./
+COPY web ./web
+RUN npm install --no-audit --no-fund \
+    && npx tailwindcss -c ./tailwind.config.js -i ./web/tailwind/input.css -o ./web/static/css/tailwind.css --minify
+
 # ---- ビルドステージ ----
 FROM golang:1.26-alpine AS builder
 
@@ -29,6 +39,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 #   -buildvcs=false: VCSスタンプを無効化しgitを不要にする
 #   -ldflags -s -w: デバッグ情報を除去してサイズ削減
 COPY . .
+# CDN実行をやめた分、埋め込むCSSはCSSビルドステージで生成した最新版で上書きする。
+COPY --from=webbuilder /web/web/static/css/tailwind.css ./web/static/css/tailwind.css
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build \

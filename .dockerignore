@@ -8,11 +8,18 @@
 config.yaml
 config/
 data/
+data-oidc/
 logs/
 *.db
 .env
 .env.*
 !.env.example
+.envrc
+
+# ローカル開発ツール（ビルドに不要）
+.claude/
+.mcp.json
+.golangci*.yml
 
 # ドキュメント・コンテナ定義（ビルドに不要）
 docs/
@@ -28,3 +35,6 @@ nginx/
 .vscode/
 .idea/
 .DS_Store
+
+# Node依存（webbuilderステージでnpm installするためコンテキストに不要）
+node_modules/

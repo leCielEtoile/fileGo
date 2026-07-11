@@ -6,28 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{.ServiceName}} - モバイル</title>
 
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        discord: {
-                            500: '#5865F2',
-                            600: '#4752C4',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- コンパイル済み Tailwind CSS（CDN実行をやめ、ビルド時に静的生成） -->
+    <link rel="stylesheet" href="/static/css/tailwind.css">
 
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
-    <!-- Custom CSS -->
+    <!-- カスタムCSS（アニメーション・スクロールバー等） -->
     <link rel="stylesheet" href="/static/css/style.css">
 
     <style>
@@ -40,12 +25,12 @@
 <body class="bg-gray-100 dark:bg-gray-900 min-h-screen transition-colors duration-300">
     <div x-data="appState()">
         <!-- モバイルヘッダー -->
-        <header class="bg-discord-500 dark:bg-gray-800 text-white px-4 py-3 sticky top-0 z-50 shadow-lg">
+        <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-gray-800 dark:text-white px-4 py-3 sticky top-0 z-50">
             <div class="flex justify-between items-center">
-                <h1 class="text-lg font-bold truncate">{{.ServiceName}}</h1>
+                <h1 class="text-lg font-medium truncate">{{.ServiceName}}</h1>
                 <div class="flex items-center gap-2">
                     <button @click="darkMode = !darkMode; localStorage.setItem('darkMode', darkMode)"
-                            class="p-2 rounded-lg hover:bg-white/10 transition-colors">
+                            class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                         <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
                         </svg>
@@ -62,12 +47,12 @@
             <!-- ログイン前 -->
             <div id="login-section" class="p-6 pt-12">
                 <div class="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg text-center">
-                    <svg class="w-16 h-16 mx-auto mb-4 text-discord-500" fill="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-16 h-16 mx-auto mb-4 text-primary-500" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                     </svg>
                     <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-3">ログインが必要です</h2>
                     <p class="text-gray-600 dark:text-gray-300 mb-6">アカウントでログイン</p>
-                    <a href="/auth/login" class="block w-full px-6 py-3 bg-discord-500 hover:bg-discord-600 text-white font-bold rounded-xl transition-all">
+                    <a href="/auth/login" class="block w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-bold rounded-xl transition-all">
                         {{.LoginLabel}}でログイン
                     </a>
                 </div>
@@ -115,7 +100,7 @@
                     </div>
                     <div class="flex gap-2">
                         <button onclick="document.getElementById('file-input').click()"
-                                class="flex-1 px-4 py-2.5 bg-discord-500 hover:bg-discord-600 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2">
+                                class="flex-1 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                             </svg>
@@ -131,9 +116,9 @@
                 </div>
 
                 <!-- ドロップオーバーレイ -->
-                <div id="drop-overlay" class="hidden fixed inset-0 bg-discord-500/20 backdrop-blur-sm z-40 flex items-center justify-center">
+                <div id="drop-overlay" class="hidden fixed inset-0 bg-primary-500/20 backdrop-blur-sm z-40 flex items-center justify-center">
                     <div class="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center">
-                        <svg class="w-20 h-20 mx-auto mb-4 text-discord-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-20 h-20 mx-auto mb-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                         </svg>
                         <p class="text-xl font-bold text-gray-800 dark:text-white">ドロップして<br>アップロード</p>
@@ -145,21 +130,21 @@
         <!-- ボトムナビゲーション -->
         <nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-2 safe-area-inset-bottom z-40" x-data="{ activeTab: 'files' }">
             <div class="flex justify-around items-center max-w-md mx-auto">
-                <button @click="activeTab = 'files'" :class="activeTab === 'files' ? 'text-discord-500' : 'text-gray-400'" class="flex flex-col items-center p-2 transition-colors">
+                <button @click="activeTab = 'files'" :class="activeTab === 'files' ? 'text-primary-500' : 'text-gray-400'" class="flex flex-col items-center p-2 transition-colors">
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                     </svg>
                     <span class="text-xs">ファイル</span>
                 </button>
-                <button onclick="document.getElementById('file-input').click()" class="flex flex-col items-center p-2 text-discord-500">
-                    <div class="bg-discord-500 rounded-full p-3 -mt-8 shadow-lg">
+                <button onclick="document.getElementById('file-input').click()" class="flex flex-col items-center p-2 text-primary-500">
+                    <div class="bg-primary-500 rounded-full p-3 -mt-8 shadow-lg">
                         <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                         </svg>
                     </div>
                     <span class="text-xs mt-1">アップロード</span>
                 </button>
-                <button @click="activeTab = 'activity'; window.dispatchEvent(new Event('show-activity'))" :class="activeTab === 'activity' ? 'text-discord-500' : 'text-gray-400'" class="flex flex-col items-center p-2 transition-colors">
+                <button @click="activeTab = 'activity'; window.dispatchEvent(new Event('show-activity'))" :class="activeTab === 'activity' ? 'text-primary-500' : 'text-gray-400'" class="flex flex-col items-center p-2 transition-colors">
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
@@ -201,7 +186,7 @@
                     </div>
                 </div>
                 <div class="flex gap-2">
-                    <button @click="detailFile && window.downloadFile(detailFile.filename)" class="flex-1 px-4 py-3 bg-discord-500 hover:bg-discord-600 text-white font-semibold rounded-xl">
+                    <button @click="detailFile && window.downloadFile(detailFile.filename)" class="flex-1 px-4 py-3 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-xl">
                         ダウンロード
                     </button>
                     <button @click="detailFile && window.deleteFile(detailFile.filename); detailModal = false" class="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl">
@@ -238,6 +223,8 @@
         </template>
     </div>
 
+    <!-- モバイルテンプレートであることを app.js へ伝える（ファイル一覧を縦積みリストで描画） -->
+    <script>window.IS_MOBILE = true;</script>
     <script src="/static/js/alpine-components.js"></script>
     <script src="/static/js/app.js"></script>
 </body>

@@ -6,51 +6,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.ServiceName}} - PC版</title>
 
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        discord: {
-                            500: '#5865F2',
-                            600: '#4752C4',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- コンパイル済み Tailwind CSS（CDN実行をやめ、ビルド時に静的生成） -->
+    <link rel="stylesheet" href="/static/css/tailwind.css">
 
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
-    <!-- Custom CSS (既存スタイルとの共存用) -->
+    <!-- カスタムCSS（アニメーション・スクロールバー等） -->
     <link rel="stylesheet" href="/static/css/style.css">
 
     <style>
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body class="bg-gradient-to-br from-purple-500 to-indigo-600 dark:from-gray-900 dark:to-gray-800 min-h-screen p-5 transition-colors duration-300">
-    <div class="max-w-7xl mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden transition-colors duration-300"
+<body class="bg-gray-50 dark:bg-gray-900 min-h-screen transition-colors duration-300">
+    <div class="min-h-screen bg-white dark:bg-gray-800 transition-colors duration-300"
          x-data="appState()">
 
         <!-- Header -->
-        <header class="bg-discord-500 dark:bg-gray-900 text-white px-6 py-4 flex justify-between items-center sticky top-0 z-50 shadow-lg">
-            <div class="flex items-center gap-4">
-                <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+        <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-gray-800 dark:text-white px-6 py-3 flex justify-between items-center sticky top-0 z-50">
+            <div class="flex items-center gap-3">
+                <svg class="w-7 h-7 text-primary-500" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M9 2v6H3V2h6m0 16v-6h6v6H9m10-6h-4V2h4v10M3 22v-6h10v6H3z"/>
                 </svg>
-                <h1 class="text-2xl font-bold">{{.ServiceName}}</h1>
+                <h1 class="text-xl font-medium">{{.ServiceName}}</h1>
             </div>
 
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3">
                 <!-- ダークモード切り替え -->
                 <button @click="darkMode = !darkMode; localStorage.setItem('darkMode', darkMode)"
-                        class="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                        class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                         title="ダークモード切り替え">
                     <svg x-show="!darkMode" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
@@ -64,16 +49,16 @@
             </div>
         </header>
 
-        <main class="p-8">
+        <div class="app-shell">
             <!-- ログイン前 -->
-            <div id="login-section" class="text-center py-20">
-                <div class="max-w-md mx-auto bg-gray-50 dark:bg-gray-700 rounded-2xl p-12 shadow-lg">
-                    <svg class="w-20 h-20 mx-auto mb-6 text-discord-500" fill="currentColor" viewBox="0 0 24 24">
+            <div id="login-section" class="text-center py-20 px-8">
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-xl p-10 border border-gray-200 dark:border-gray-700">
+                    <svg class="w-16 h-16 mx-auto mb-6 text-primary-500" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                     </svg>
-                    <h2 class="text-3xl font-bold text-gray-800 dark:text-white mb-4">ログインが必要です</h2>
+                    <h2 class="text-2xl font-medium text-gray-800 dark:text-white mb-3">ログインが必要です</h2>
                     <p class="text-gray-600 dark:text-gray-300 mb-8">アカウントでログインしてください</p>
-                    <a href="/auth/login" class="inline-block px-8 py-4 bg-discord-500 hover:bg-discord-600 text-white font-bold rounded-xl transition-all transform hover:scale-105 hover:shadow-lg">
+                    <a href="/auth/login" class="inline-block px-8 py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors">
                         {{.LoginLabel}}でログイン
                     </a>
                 </div>
@@ -94,7 +79,7 @@
                         <!-- サイドバーヘッダー -->
                         <div class="p-4 border-b border-gray-200 dark:border-gray-700">
                             <h2 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2 whitespace-nowrap">
-                                <svg class="w-5 h-5 text-discord-500" fill="currentColor" viewBox="0 0 20 20">
+                                <svg class="w-5 h-5 text-primary-500" fill="currentColor" viewBox="0 0 20 20">
                                     <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                                 </svg>
                                 フォルダ
@@ -120,7 +105,7 @@
                                 </button>
 
                                 <!-- パンくずリスト -->
-                                <nav id="breadcrumb" class="flex items-center text-sm truncate">
+                                <nav id="breadcrumb" class="flex items-center text-sm min-w-0 flex-1">
                                     <span class="text-gray-500 dark:text-gray-400 truncate">フォルダを選択してください</span>
                                 </nav>
                             </div>
@@ -130,7 +115,7 @@
                                 <!-- 検索 -->
                                 <div class="relative">
                                     <input type="text" id="search-input" placeholder="ファイルを検索..."
-                                           class="w-64 pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-discord-500">
+                                           class="w-64 pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
                                     <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                                     </svg>
@@ -167,7 +152,7 @@
                                 </div>
 
                                 <!-- 並べ替え -->
-                                <select id="sort-select" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-discord-500">
+                                <select id="sort-select" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
                                     <option value="name-asc">名前 (A-Z)</option>
                                     <option value="name-desc">名前 (Z-A)</option>
                                     <option value="size-asc">サイズ (小→大)</option>
@@ -177,7 +162,7 @@
                                 </select>
 
                                 <!-- アップロードボタン -->
-                                <button onclick="document.getElementById('file-input').click()" class="px-4 py-2 bg-discord-500 hover:bg-discord-600 text-white font-semibold rounded-lg transition-all flex items-center gap-2">
+                                <button onclick="document.getElementById('file-input').click()" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg transition-all flex items-center gap-2">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                                     </svg>
@@ -193,9 +178,9 @@
                         <div id="files-list"></div>
 
                         <!-- 全画面D&Dオーバーレイ -->
-                        <div id="drop-overlay" class="hidden fixed inset-0 bg-discord-500/20 backdrop-blur-sm z-40 flex items-center justify-center">
-                            <div class="bg-white dark:bg-gray-800 rounded-2xl p-12 border-4 border-dashed border-discord-500 shadow-2xl">
-                                <svg class="w-24 h-24 mx-auto mb-4 text-discord-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div id="drop-overlay" class="hidden fixed inset-0 bg-primary-500/20 backdrop-blur-sm z-40 flex items-center justify-center">
+                            <div class="bg-white dark:bg-gray-800 rounded-2xl p-12 border-4 border-dashed border-primary-500 shadow-2xl">
+                                <svg class="w-24 h-24 mx-auto mb-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                                 </svg>
                                 <p class="text-2xl font-bold text-gray-800 dark:text-white">ファイルをドロップ</p>
@@ -218,7 +203,7 @@
                     <!-- ヘッダー -->
                     <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                         <h2 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                            <svg class="w-5 h-5 text-discord-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
                             アクティビティ
@@ -259,7 +244,7 @@
                     <!-- ヘッダー -->
                     <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                         <h2 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                            <svg class="w-5 h-5 text-discord-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                             </svg>
                             アップロード
@@ -293,7 +278,7 @@
                 </div>
             </div>
             </div>
-        </main>
+        </div>
     </div>
 
     <!-- ファイル詳細モーダル -->
@@ -350,7 +335,7 @@
                     <!-- ファイルサイズ -->
                     <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                         <div class="flex items-center gap-3 mb-2">
-                            <svg class="w-5 h-5 text-discord-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                             </svg>
                             <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ファイルサイズ</span>
@@ -362,7 +347,7 @@
                     <!-- 更新日時 -->
                     <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                         <div class="flex items-center gap-3 mb-2">
-                            <svg class="w-5 h-5 text-discord-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
                             <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">更新日時</span>
@@ -374,7 +359,7 @@
                     <!-- アップロード者 -->
                     <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                         <div class="flex items-center gap-3 mb-2">
-                            <svg class="w-5 h-5 text-discord-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                             </svg>
                             <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">アップロード者</span>
@@ -386,7 +371,7 @@
                     <!-- ハッシュ値 -->
                     <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                         <div class="flex items-center gap-3 mb-2">
-                            <svg class="w-5 h-5 text-discord-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
                             </svg>
                             <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ハッシュ値 (SHA256)</span>
@@ -399,7 +384,7 @@
                 <!-- アクションボタン -->
                 <div class="flex gap-3">
                     <button @click="detailFile && window.downloadFile(detailFile.filename)"
-                            class="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-discord-500 hover:bg-discord-600 text-white font-semibold rounded-xl transition-all">
+                            class="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-xl transition-all">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                         </svg>
@@ -440,7 +425,7 @@
             </svg>
             ダウンロード
         </button>
-        <button @click="file && navigator.clipboard.writeText(window.location.origin + '/files/download?directory=' + encodeURIComponent(window.state.selectedDirectory) + '&filename=' + encodeURIComponent(file.filename)); window.toast.success('リンクをコピーしました'); show = false"
+        <button @click="file && navigator.clipboard.writeText(window.location.origin + '/files/download/' + encodeURIComponent(window.state.selectedDirectory) + '/' + encodeURIComponent(file.filename)); window.toast.success('リンクをコピーしました'); show = false"
                 class="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-3 text-gray-700 dark:text-gray-200">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>

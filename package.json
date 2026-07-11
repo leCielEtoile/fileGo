@@ -1,0 +1,11 @@
+{
+  "name": "filego-web",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build:css": "tailwindcss -c ./tailwind.config.js -i ./web/tailwind/input.css -o ./web/static/css/tailwind.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}
