@@ -1,0 +1,608 @@
+openapi: 3.0.3
+info:
+  title: fileGo API
+  description: |
+    Discord OAuth2（またはOIDC）認証とgrantsベースの権限管理を備えたファイル共有サーバーのHTTP API。
+
+    ## 認証
+    ログインはブラウザ経由のOAuth2/OIDCフローで行い、成功すると `session_token` クッキー（HttpOnly, 有効期限7日）が発行されます。
+    認証が必要なエンドポイントはこのクッキーを送出する必要があります。
+
+    ## エラー形式
+    エラーレスポンスのボディは **プレーンテキスト**（`text/plain`）です。JSONではありません。
+    成功レスポンスのみJSONを返します。
+  version: 1.0.0
+  license:
+    name: BSD 3-Clause
+    url: https://opensource.org/licenses/BSD-3-Clause
+
+servers:
+  - url: http://localhost:8080
+    description: ローカル開発
+  - url: https://yourdomain.com
+    description: 本番（例）
+
+tags:
+  - name: auth
+    description: 認証
+  - name: user
+    description: ユーザー情報
+  - name: files
+    description: ファイル操作
+  - name: chunk
+    description: チャンクアップロード
+  - name: admin
+    description: 管理者専用
+  - name: system
+    description: システム
+
+paths:
+  /:
+    get:
+      tags: [system]
+      summary: Webインターフェース
+      description: User-Agentに応じてPC/モバイル用HTMLを返します。
+      security: []
+      responses:
+        '200':
+          description: HTMLページ
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /health:
+    get:
+      tags: [system]
+      summary: ヘルスチェック
+      security: []
+      responses:
+        '200':
+          description: 稼働中
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+
+  /auth/login:
+    get:
+      tags: [auth]
+      summary: ログイン開始
+      description: CSRF用の `oauth_state` クッキーを設定し、認証プロバイダーの認可URLへリダイレクトします。
+      security: []
+      responses:
+        '307':
+          description: プロバイダーの認可URLへのリダイレクト
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: oauth_state=...; Path=/; Max-Age=300; HttpOnly
+
+  /auth/callback:
+    get:
+      tags: [auth]
+      summary: OAuth2/OIDCコールバック（自動処理）
+      description: プロバイダーからのリダイレクトを受け、stateを照合してセッションを確立します。ユーザーが直接呼ぶものではありません。
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 認可コード
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: CSRFトークン（oauth_stateクッキーと一致する必要がある）
+      responses:
+        '303':
+          description: 認証成功。ルートへリダイレクトし `session_token` を発行
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: session_token=...; Path=/; HttpOnly; SameSite=Lax
+        '400':
+          description: stateまたはcodeが不正
+          content:
+            text/plain: { schema: { type: string } }
+        '403':
+          description: アクセスが許可されていない（非メンバー / allowlist外）
+          content:
+            text/plain: { schema: { type: string } }
+        '500':
+          description: トークン交換・ユーザー情報取得の失敗
+          content:
+            text/plain: { schema: { type: string } }
+
+  /auth/logout:
+    get:
+      tags: [auth]
+      summary: ログアウト
+      description: セッションを破棄し、`session_token` クッキーを失効させます。
+      responses:
+        '303':
+          description: ルートへリダイレクト
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: session_token=; Path=/; Max-Age=0
+
+  /api/user:
+    get:
+      tags: [user]
+      summary: 現在のユーザー情報
+      responses:
+        '200':
+          description: ユーザー情報
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: 未認証
+          content:
+            text/plain: { schema: { type: string } }
+
+  /api/events:
+    get:
+      tags: [system]
+      summary: Server-Sent Events（リアルタイム通知）
+      description: |
+        アップロード・ダウンロード・削除・ログインのイベントを配信するSSEストリーム。
+        `text/event-stream` を返し、接続が維持されます。
+      responses:
+        '200':
+          description: イベントストリーム
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /files/directories:
+    get:
+      tags: [files]
+      summary: アクセス可能なディレクトリ一覧
+      responses:
+        '200':
+          description: ディレクトリと実効権限
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  directories:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path: { type: string, example: public }
+                        permissions:
+                          type: array
+                          items: { type: string, enum: [read, write, delete] }
+        '401':
+          description: 未認証
+          content:
+            text/plain: { schema: { type: string } }
+
+  /files:
+    get:
+      tags: [files]
+      summary: ディレクトリ内のファイル一覧
+      parameters:
+        - name: directory
+          in: query
+          required: true
+          schema: { type: string }
+          example: public
+      responses:
+        '200':
+          description: ファイル一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  directory: { type: string }
+                  files:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FileInfo'
+        '400':
+          description: ディレクトリ未指定 / 不正なパス
+          content:
+            text/plain: { schema: { type: string } }
+        '403':
+          description: 読み取り権限なし
+          content:
+            text/plain: { schema: { type: string } }
+
+  /files/upload:
+    post:
+      tags: [files]
+      summary: 通常アップロード（既定最大100MB）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [directory, file]
+              properties:
+                directory:
+                  type: string
+                  description: アップロード先ディレクトリ
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 保存成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  filename: { type: string, example: "uuid_example.txt" }
+                  size: { type: integer, format: int64 }
+                  path: { type: string, example: "public/uuid_example.txt" }
+        '400':
+          description: ファイル未指定 / 不正なディレクトリ / サイズ超過
+          content:
+            text/plain: { schema: { type: string } }
+        '403':
+          description: 書き込み権限なし
+          content:
+            text/plain: { schema: { type: string } }
+
+  /files/download/{directory}/{filename}:
+    get:
+      tags: [files]
+      summary: ダウンロード（Range Request対応）
+      parameters:
+        - name: directory
+          in: path
+          required: true
+          schema: { type: string }
+        - name: filename
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Range
+          in: header
+          required: false
+          schema: { type: string }
+          example: bytes=0-1023
+      responses:
+        '200':
+          description: ファイル全体
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '206':
+          description: 部分コンテンツ（Range指定時）
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '403':
+          description: 読み取り権限なし
+          content:
+            text/plain: { schema: { type: string } }
+        '404':
+          description: ファイルが存在しない
+          content:
+            text/plain: { schema: { type: string } }
+        '416':
+          description: Range指定が不正
+          content:
+            text/plain: { schema: { type: string } }
+
+  /files/{directory}/{filename}:
+    delete:
+      tags: [files]
+      summary: ファイル削除
+      parameters:
+        - name: directory
+          in: path
+          required: true
+          schema: { type: string }
+        - name: filename
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 削除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccess'
+        '403':
+          description: 削除権限なし
+          content:
+            text/plain: { schema: { type: string } }
+        '404':
+          description: ファイルが存在しない
+          content:
+            text/plain: { schema: { type: string } }
+
+  /files/chunk/init:
+    post:
+      tags: [chunk]
+      summary: チャンクアップロード初期化
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, directory, file_size, chunk_size]
+              properties:
+                filename: { type: string }
+                directory: { type: string }
+                file_size: { type: integer, format: int64 }
+                chunk_size: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: セッション作成
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  upload_id: { type: string, format: uuid }
+                  total_chunks: { type: integer }
+                  chunk_size: { type: integer, format: int64 }
+        '400':
+          description: パラメータ不正 / サイズ超過 / 同時アップロード上限
+          content:
+            text/plain: { schema: { type: string } }
+        '403':
+          description: 書き込み権限なし
+          content:
+            text/plain: { schema: { type: string } }
+
+  /files/chunk/upload/{upload_id}:
+    post:
+      tags: [chunk]
+      summary: チャンク送信
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: chunk_index
+          in: query
+          required: true
+          schema: { type: integer }
+          description: 0始まりのチャンク番号
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: チャンク保存成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  chunk_index: { type: integer }
+        '400':
+          description: chunk_indexが不正
+          content:
+            text/plain: { schema: { type: string } }
+        '500':
+          description: セッションが存在しない / 保存失敗
+          content:
+            text/plain: { schema: { type: string } }
+
+  /files/chunk/status/{upload_id}:
+    get:
+      tags: [chunk]
+      summary: アップロード状態取得（レジューム用）
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 現在の進捗
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  upload_id: { type: string }
+                  filename: { type: string }
+                  directory: { type: string }
+                  total_chunks: { type: integer }
+                  uploaded_chunks:
+                    type: array
+                    items: { type: integer }
+                  file_size: { type: integer, format: int64 }
+                  uploaded_size: { type: integer, format: int64 }
+                  created_at: { type: string, format: date-time }
+                  updated_at: { type: string, format: date-time }
+        '404':
+          description: upload_idが存在しない
+          content:
+            text/plain: { schema: { type: string } }
+
+  /files/chunk/complete/{upload_id}:
+    post:
+      tags: [chunk]
+      summary: アップロード完了（チャンク結合）
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 完了
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  path: { type: string }
+                  filename: { type: string }
+                  size: { type: integer, format: int64 }
+        '500':
+          description: チャンク不足 / セッションが存在しない
+          content:
+            text/plain: { schema: { type: string } }
+
+  /files/chunk/cancel/{upload_id}:
+    delete:
+      tags: [chunk]
+      summary: アップロード中止（一時ファイル削除）
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: キャンセル成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccess'
+        '500':
+          description: セッションが存在しない
+          content:
+            text/plain: { schema: { type: string } }
+
+  /admin:
+    get:
+      tags: [admin]
+      summary: 管理者ページ（HTML）
+      responses:
+        '200':
+          description: 管理者向けHTML
+          content:
+            text/html:
+              schema: { type: string }
+        '403':
+          description: 管理者権限なし
+          content:
+            text/plain: { schema: { type: string } }
+
+  /api/admin/uploads:
+    get:
+      tags: [admin]
+      summary: 進行中のアップロードセッション一覧
+      responses:
+        '200':
+          description: セッション一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UploadSessionInfo'
+        '403':
+          description: 管理者権限なし
+          content:
+            text/plain: { schema: { type: string } }
+
+  /api/admin/stats:
+    get:
+      tags: [admin]
+      summary: アップロード統計
+      responses:
+        '200':
+          description: 統計情報
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_sessions: { type: integer }
+                  total_users: { type: integer }
+                  total_size: { type: integer, format: int64 }
+                  total_uploaded_size: { type: integer, format: int64 }
+                  max_concurrent: { type: integer }
+                  user_upload_counts:
+                    type: object
+                    additionalProperties: { type: integer }
+        '403':
+          description: 管理者権限なし
+          content:
+            text/plain: { schema: { type: string } }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session_token
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, description: "プロバイダー内のsubject" }
+        provider: { type: string, example: discord }
+        subject: { type: string }
+        username: { type: string }
+        avatar: { type: string }
+        email: { type: string }
+        created_at: { type: string, format: date-time }
+        last_login: { type: string, format: date-time }
+
+    FileInfo:
+      type: object
+      properties:
+        filename: { type: string, description: "保存名（UUID_元名）" }
+        original_name: { type: string }
+        uploader: { type: string }
+        hash: { type: string, description: "SHA256" }
+        path: { type: string }
+        size: { type: integer, format: int64 }
+        modified_at: { type: string, format: date-time }
+        is_directory: { type: boolean }
+
+    UploadSessionInfo:
+      type: object
+      properties:
+        upload_id: { type: string }
+        user_id: { type: string }
+        filename: { type: string }
+        directory: { type: string }
+        total_size: { type: integer, format: int64 }
+        chunk_size: { type: integer, format: int64 }
+        total_chunks: { type: integer }
+        uploaded_chunks: { type: integer }
+        progress: { type: number, format: float }
+        created_at: { type: string }
+        updated_at: { type: string }
+        expires_at: { type: string }
+
+    SimpleSuccess:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string }
+
+security:
+  - sessionCookie: []

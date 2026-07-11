@@ -1,0 +1,35 @@
+version: 2
+
+# ワークフロー内のActionは正確なバージョンへ固定しているため、
+# Dependabotによる自動更新が無いと陳腐化する。固定と自動更新はセットで運用する。
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      # 個別PRが乱立しないよう、パッチ/マイナー更新はまとめる
+      actions-minor:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      go-minor:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Dockerfile のベースイメージ。Dependabot は ARG 経由の FROM を解決できないため、
+  # Dockerfile 側では literal に記述している。distroless の :nonroot は
+  # バージョンを持たないローリングタグなので、ダイジェスト固定により更新を追従する。
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"

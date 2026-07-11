@@ -1,0 +1,353 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [ main, develop ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # タグのビルドはリリース成果物の生成に直結するため中断しない
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+# 既定は読み取りのみとし、必要なジョブでのみ権限を昇格する
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  lint:
+    name: 🔍 コード品質チェック
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 📥 コードをチェックアウト
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: 🐹 Go環境をセットアップ
+        uses: actions/setup-go@v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: ✨ golangci-lintを実行
+        uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version: v2.12.2
+          args: --timeout=5m
+          skip-cache: false
+
+  test:
+    name: 🧪 テスト実行
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 📥 コードをチェックアウト
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: 🐹 Go環境をセットアップ
+        uses: actions/setup-go@v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # 現時点でテストファイルは存在しないが、-race 付き実行は全パッケージの
+      # コンパイル検証として機能する。テスト追加時にカバレッジ計測を復活させる。
+      - name: 🧪 テストを実行
+        run: go test -v -race ./...
+
+  build:
+    name: 🔨 バイナリビルド (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [lint, test]
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    steps:
+      - name: 📥 コードをチェックアウト
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: 🐹 Go環境をセットアップ
+        uses: actions/setup-go@v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 🔨 バイナリをビルド
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -v -trimpath -ldflags="-s -w" -o fileserver-${{ matrix.goos }}-${{ matrix.goarch }} .
+
+      - name: 📤 ビルド成果物をアップロード
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: fileserver-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: fileserver-${{ matrix.goos }}-${{ matrix.goarch }}
+          retention-days: 7
+
+  security-scan:
+    name: 🔒 セキュリティスキャン
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: 📥 コードをチェックアウト
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      # 検出結果はGitHub Securityタブへ集約する。ビルド自体は停止させず、
+      # 継続的にアラートとして可視化する運用とする。
+      - name: 🔒 Gosecセキュリティスキャナーを実行
+        uses: securego/gosec@v2.27.1
+        with:
+          args: '-no-fail -fmt sarif -out gosec-results.sarif ./...'
+
+      - name: 📤 Gosec結果をGitHub Securityにアップロード
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4.37.0
+        with:
+          sarif_file: gosec-results.sarif
+          category: gosec
+        continue-on-error: true
+
+  docker:
+    name: 🐳 Dockerビルド & プッシュ (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [lint, test]
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    strategy:
+      fail-fast: false
+      # ジョブレベルの if では matrix コンテキストを参照できないため、
+      # マトリクス自体をイベントに応じて組み立てる。
+      # PRではQEMU経由のARM64ビルドが高コストなためAMD64のみを対象とする。
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"platform":"linux/amd64","platform_tag":"amd64"}]' || '[{"platform":"linux/amd64","platform_tag":"amd64"},{"platform":"linux/arm64","platform_tag":"arm64"}]') }}
+
+    steps:
+      - name: 📥 コードをチェックアウト
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: 🔧 QEMUをセットアップ
+        if: matrix.platform == 'linux/arm64'
+        uses: docker/setup-qemu-action@v4.2.0
+
+      - name: 🔧 Docker Buildxをセットアップ
+        uses: docker/setup-buildx-action@v4.2.0
+
+      - name: 🔐 GitHub Container Registryにログイン
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # OCIイメージ参照は小文字必須。github.repository は大文字を含み得るため
+      # 手書きの参照（Trivy等）用に小文字化する。metadata-actionは自動で小文字化する。
+      - name: 🔤 イメージ名を小文字化
+        id: img
+        run: echo "ref=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: 📝 メタデータを抽出
+        id: meta
+        uses: docker/metadata-action@v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+          flavor: |
+            suffix=-${{ matrix.platform_tag }}
+
+      # PR時はレジストリへ push せず、後段のスキャン用にtarballへ書き出す。
+      - name: 🐳 Dockerイメージをビルド & プッシュ
+        id: build-and-push
+        uses: docker/build-push-action@v7.3.0
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.platform_tag }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform_tag }}
+          outputs: ${{ github.event_name == 'pull_request' && 'type=docker,dest=/tmp/image.tar' || '' }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VCS_REF=${{ github.sha }}
+
+      - name: 📤 Dockerイメージをアップロード
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: docker-image
+          path: /tmp/image.tar
+          retention-days: 1
+
+      # レポート生成（全重大度）。結果はSecurityタブへ集約するのでここでは失敗させない。
+      # tarballの走査は image-ref ではなく input で指定する必要がある。
+      - name: 🔍 Trivyで脆弱性スキャン（レポート生成）
+        if: matrix.platform == 'linux/amd64'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ github.event_name != 'pull_request' && format('{0}/{1}:{2}', env.REGISTRY, steps.img.outputs.ref, steps.meta.outputs.version) || '' }}
+          input: ${{ github.event_name == 'pull_request' && '/tmp/image.tar' || '' }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          ignore-unfixed: true
+
+      - name: 📤 Trivy結果をGitHub Securityにアップロード
+        if: always() && matrix.platform == 'linux/amd64'
+        uses: github/codeql-action/upload-sarif@v4.37.0
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: trivy
+        continue-on-error: true
+
+      # 修正済みのCRITICAL脆弱性が残っている場合はビルドを失敗させる。
+      - name: 🚨 TrivyでCRITICAL脆弱性を検査（ゲート）
+        if: matrix.platform == 'linux/amd64'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ github.event_name != 'pull_request' && format('{0}/{1}:{2}', env.REGISTRY, steps.img.outputs.ref, steps.meta.outputs.version) || '' }}
+          input: ${{ github.event_name == 'pull_request' && '/tmp/image.tar' || '' }}
+          format: 'table'
+          severity: 'CRITICAL'
+          ignore-unfixed: true
+          exit-code: '1'
+
+  docker-manifest:
+    name: 📦 Dockerマニフェスト作成
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [docker]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: 🔐 GitHub Container Registryにログイン
+        uses: docker/login-action@v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # OCIイメージ参照は小文字必須。手書き参照（SBOM等）用に小文字化する。
+      - name: 🔤 イメージ名を小文字化
+        id: img
+        run: echo "ref=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: 📝 メタデータを抽出
+        id: meta
+        uses: docker/metadata-action@v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: 📦 マルチプラットフォームマニフェストを作成 & プッシュ
+        run: |
+          TAGS="${{ steps.meta.outputs.tags }}"
+          for tag in $TAGS; do
+            docker buildx imagetools create -t ${tag} \
+              ${tag}-amd64 \
+              ${tag}-arm64
+          done
+
+      - name: 📋 SBOM（ソフトウェア部品表）を生成
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          image: ${{ env.REGISTRY }}/${{ steps.img.outputs.ref }}:${{ steps.meta.outputs.version }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: 📤 SBOMをアップロード
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: sbom
+          path: sbom.spdx.json
+          retention-days: 90
+
+  docker-compose-test:
+    name: 🧪 Docker Composeテスト
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [docker]
+    steps:
+      - name: 📥 コードをチェックアウト
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: 🔧 Docker Buildxをセットアップ
+        uses: docker/setup-buildx-action@v4.2.0
+
+      # compose定義は build: を持つためイメージは常にここでビルドされる。
+      # これによりDockerfile自体が起動可能かを毎回検証できる。
+      - name: 📁 データディレクトリを作成
+        run: |
+          mkdir -p config data
+          # コンテナは非rootユーザー(UID 65532)で動作するため書き込み権限を与える
+          sudo chown -R 65532:65532 config data
+
+      - name: 🚀 サービスを起動
+        run: docker compose up -d --build
+
+      - name: ⏳ ヘルスチェックが通るまで待機
+        run: timeout 60 sh -c 'until curl -fsS http://localhost:8080/health; do sleep 2; done'
+
+      - name: ✅ コンテナステータスを確認
+        run: docker compose ps
+
+      - name: 🔍 設定ファイルが自動生成されたことを確認
+        run: test -f config/config.yaml
+
+      - name: 📋 ログを表示
+        if: always()
+        run: docker compose logs
+
+      - name: 🛑 サービスを停止
+        if: always()
+        run: docker compose down

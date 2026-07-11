@@ -1,0 +1,147 @@
+# ========================================
+# サーバー設定
+# ========================================
+server:
+  # サーバーのポート番号
+  port: "8080"
+
+  # サービスの表示名（Webページのタイトルなどに使用）
+  service_name: "Discord File Server"
+
+  # リバースプロキシ（nginx等）の背後で動作する場合はtrue
+  behind_proxy: true
+
+  # Cookieのセキュア属性（HTTPS環境ではtrue、HTTP開発環境ではfalse）
+  secure_cookie: true
+
+  # 信頼するプロキシのIPアドレス範囲（CIDR表記）
+  # behind_proxyがtrueの場合に使用されます
+  trusted_proxies:
+    - "172.16.0.0/12"   # Dockerのデフォルトネットワーク
+    - "10.0.0.0/8"      # プライベートネットワーク
+    - "192.168.0.0/16"  # ローカルネットワーク
+
+# ========================================
+# 認証プロバイダー設定
+# ========================================
+# ログインURL: /auth/login、コールバックURL: /auth/callback
+# 認証プロバイダーは1つに限定します（Discordでの利用を主眼とした設計）。
+# type には "discord"（主）または "oidc"（Keycloak/Google等の補助対応）を指定します。
+auth:
+  provider:
+    # --- Discord（type: discord、既定・推奨） ---
+    # DiscordはOIDCを提供していないため、OAuth2 + REST APIで認証します。
+    name: discord
+    type: discord
+
+    # Discord Botのトークン（Discord Developer Portalから取得。ロール/在籍確認に使用）
+    bot_token: "YOUR_BOT_TOKEN"
+
+    # Discord ApplicationのClient ID / Client Secret
+    client_id: "YOUR_CLIENT_ID"
+    client_secret: "YOUR_CLIENT_SECRET"
+
+    # 対象のDiscordサーバー（ギルド）のID
+    guild_id: "YOUR_GUILD_ID"
+
+    # OAuth2認証後のリダイレクトURL
+    # Discord Developer Portalの「OAuth2 > Redirects」に登録する必要があります
+    redirect_url: "https://yourdomain.com/auth/callback"
+
+  # --- 代わりに汎用OIDCを使う場合（type: oidc） ---
+  # Discordの代替として1つだけ設定できます。ギルドのような在籍制限が無いため、
+  # ログイン後の継続的な在籍検証は行われません。
+  # アクセスを絞るには allowed_email_domains / allowed_emails を使用してください。
+  #
+  # provider:
+  #   name: keycloak
+  #   type: oidc
+  #   issuer: "https://keycloak.example.com/realms/YOUR_REALM"
+  #   client_id: "YOUR_CLIENT_ID"
+  #   client_secret: "YOUR_CLIENT_SECRET"
+  #   redirect_url: "https://yourdomain.com/auth/callback"
+  #   scopes: ["openid", "profile", "email", "groups"]
+  #   # grants の role にはこの groups_claim のクレーム値を指定します。
+  #   # 【注意】GoogleはID Tokenに groups を含めないため、Googleでロール制御はできません。
+  #   #        Googleはログイン用途とし、下記のメール制限で絞ってください。
+  #   groups_claim: "groups"
+  #   # 任意: アクセスを許可するメールドメイン / メールアドレス（大文字小文字は区別しない）
+  #   allowed_email_domains: ["example.com"]
+  #   allowed_emails: ["admin@other.com"]
+
+# ========================================
+# データベース設定
+# ========================================
+database:
+  # SQLiteデータベースファイルのパス
+  path: "/app/config/fileserver.db"
+
+  # 最大接続数
+  max_connections: 10
+
+# ========================================
+# ストレージ設定
+# ========================================
+storage:
+  # アップロードされたファイルの保存先ディレクトリ
+  upload_path: "/app/data/uploads"
+
+  # 通常アップロードの最大ファイルサイズ（バイト単位）
+  max_file_size: 104857600  # 100MB
+
+  # チャンクアップロードの有効化（大容量ファイルを分割してアップロード）
+  chunk_upload_enabled: true
+
+  # チャンクアップロード時の1チャンクあたりのサイズ（バイト単位）
+  chunk_size: 20971520  # 20MB
+
+  # チャンクアップロードで扱える最大ファイルサイズ（バイト単位）
+  max_chunk_file_size: 536870912000  # 500GB
+
+  # 同時アップロード可能な数（チャンクアップロード）
+  max_concurrent_uploads: 3
+
+  # アップロードセッションの有効期限（未完了のチャンクアップロードがクリーンアップされるまでの時間）
+  upload_session_ttl: 48h
+
+  # クリーンアップ処理の実行間隔（期限切れのアップロードセッションを削除）
+  cleanup_interval: 1h
+
+  # 管理者ロールID（全ファイル・ディレクトリへの無制限アクセス権限）
+  # DiscordサーバーのロールIDを指定してください
+  admin_role_id: "123456789012345678"
+
+  # ディレクトリごとのアクセス権限設定
+  #
+  # grants: 付与単位のリスト。各要素は role または user のいずれかと permissions を持つ。
+  #   role: DiscordのロールID（"*" を指定すると全メンバーが対象）
+  #   user: DiscordのユーザーID（特定メンバー個人への付与）
+  #   permissions: 許可する操作（"read" / "write" / "delete"）
+  # 同一ディレクトリで役割ごとに異なる権限（read専用 / read+write 等）を割り当てられる。
+  # admin_role_id を持つユーザーは全ディレクトリで全操作が許可される。
+  directories:
+    # 各ユーザーの個人ディレクトリ（初回アップロードで作成、本人と管理者のみ閲覧可）
+    - path: "user"
+      type: user_private
+
+    # 管理者専用ディレクトリ
+    - path: "admin"
+      grants:
+        - role: "123456789012345678"
+          permissions: ["read", "write", "delete"]
+
+    # スタッフ用（editorロールは編集可、viewerロールは閲覧のみ、特定メンバー個人にも付与）
+    - path: "staff"
+      grants:
+        - role: "234567890123456789"          # editorロール
+          permissions: ["read", "write"]
+        - role: "345678901234567890"          # viewerロール（閲覧のみ）
+          permissions: ["read"]
+        - user: "111111111111111111"          # 特定メンバー個人に編集権限
+          permissions: ["read", "write"]
+
+    # 公開ディレクトリ（全メンバーが閲覧可能。"*" は全メンバーを表す）
+    - path: "public"
+      grants:
+        - role: "*"
+          permissions: ["read"]

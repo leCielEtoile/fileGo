@@ -1,0 +1,98 @@
+# Binaries
+fileserver
+fileserver.exe
+
+# 設定ファイル（機密情報）
+config/config.yaml
+config.yaml
+.env
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# データディレクトリ
+data/
+uploads/
+logs/
+backup/
+tmp/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# テスト・カバレッジ
+*.test
+*.out
+coverage.out
+coverage.html
+*.cover
+*.coverprofile
+
+# ビルド成果物
+build/
+dist/
+bin/
+
+# Go関連
+go.work
+go.work.sum
+vendor/
+
+# IDE・エディタ
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+.fleet/
+.project
+.settings/
+.classpath
+
+# OS固有
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+Desktop.ini
+
+# CI/CD・デプロイ
+.env.local
+.env.*.local
+*.log
+
+# Air（ホットリロード）
+.air.toml
+
+# デバッグ
+__debug_bin
+debug
+pprof/
+*.pprof
+
+# その他
+*.pid
+*.seed
+*.pid.lock
+.cache/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.tar.gz
+*.zip
+*.tar
+*.gz
+
+# Claude Code
+.claude/
