@@ -1,0 +1,30 @@
+# VCS
+.git
+.gitignore
+.github/
+
+# 秘密情報・実行時データ（イメージやビルドコンテキストに含めない）
+# ※ config.yaml.example はバイナリへ埋め込むため除外しない
+config.yaml
+config/
+data/
+logs/
+*.db
+.env
+.env.*
+!.env.example
+
+# ドキュメント・コンテナ定義（ビルドに不要）
+docs/
+*.md
+LICENSE
+Dockerfile
+.dockerignore
+docker-compose*.yml
+entrypoint.sh
+nginx/
+
+# エディタ・OS
+.vscode/
+.idea/
+.DS_Store

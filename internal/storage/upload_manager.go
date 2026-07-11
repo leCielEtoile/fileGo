@@ -1,0 +1,437 @@
+// Package storage はファイルストレージ管理機能を提供します。
+// このファイルはチャンク分割されたファイルアップロードを処理するアップロードマネージャーを含みます。
+package storage
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"fileserver/internal/config"
+	"fileserver/internal/models"
+
+	"github.com/google/uuid"
+)
+
+var (
+	// ErrSessionNotFound はアップロードセッションが見つからない場合に返されます
+	ErrSessionNotFound = errors.New("アップロードセッションが見つかりません")
+	// ErrMaxConcurrentUploads はユーザーが同時アップロード制限を超えた場合に返されます
+	ErrMaxConcurrentUploads = errors.New("同時アップロード数の上限に達しています")
+	// ErrIncompleteUpload はチャンクが不足したままアップロードを完了しようとした場合に返されます
+	ErrIncompleteUpload = errors.New("アップロードが完了していません")
+)
+
+// UploadManager は同時アップロード制限とクリーンアップを備えたチャンク分割ファイルアップロードセッションを管理します。
+type UploadManager struct {
+	config      *config.Config
+	sessions    map[string]*models.UploadSession
+	userUploads map[string]int // ユーザーごとの同時アップロード数
+	mu          sync.RWMutex
+}
+
+// NewUploadManager は新しいアップロードマネージャーを作成し、クリーンアップルーチンを開始します。
+func NewUploadManager(cfg *config.Config) *UploadManager {
+	um := &UploadManager{
+		config:      cfg,
+		sessions:    make(map[string]*models.UploadSession),
+		userUploads: make(map[string]int),
+	}
+
+	// クリーンアップゴルーチン起動
+	go um.startCleanupRoutine()
+
+	return um
+}
+
+// CreateUploadSession はファイルのための新しいチャンク分割アップロードセッションを作成します。
+// ファイルサイズの検証、同時アップロード制限のチェック、一時ファイルの作成を行います。
+func (um *UploadManager) CreateUploadSession(userID, filename, directory string, totalSize, chunkSize int64, totalChunks int) (*models.UploadSession, error) {
+	um.mu.Lock()
+	defer um.mu.Unlock()
+
+	// 同時アップロード数チェック
+	if um.userUploads[userID] >= um.config.Storage.MaxConcurrentUploads {
+		return nil, ErrMaxConcurrentUploads
+	}
+
+	// ファイルサイズチェック
+	if totalSize > um.config.Storage.MaxChunkFileSize {
+		return nil, fmt.Errorf("ファイルサイズが上限を超えています")
+	}
+
+	uploadID := uuid.New().String()
+	now := time.Now()
+
+	session := &models.UploadSession{
+		UploadID:       uploadID,
+		UserID:         userID,
+		Filename:       filename,
+		Directory:      directory,
+		TotalSize:      totalSize,
+		ChunkSize:      chunkSize,
+		TotalChunks:    totalChunks,
+		UploadedChunks: make([]int, 0),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		ExpiresAt:      now.Add(um.config.Storage.UploadSessionTTL),
+	}
+
+	// セッション保存
+	um.sessions[uploadID] = session
+	um.userUploads[userID]++
+
+	// .tempファイル作成
+	tempPath := um.getTempFilePath(uploadID, filename, directory)
+	if err := os.MkdirAll(filepath.Dir(tempPath), 0750); err != nil {
+		return nil, err
+	}
+
+	// #nosec G304 - tempPath is constructed from sanitized inputs
+	tempFile, err := os.Create(tempPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := tempFile.Close(); err != nil {
+		slog.Error("一時ファイルのクローズに失敗しました", "error", err)
+	}
+
+	// .metaファイル保存
+	if err := um.saveMetaFile(session); err != nil {
+		if removeErr := os.Remove(tempPath); removeErr != nil {
+			slog.Error("一時ファイルの削除に失敗しました", "error", removeErr)
+		}
+		return nil, err
+	}
+
+	return session, nil
+}
+
+// GetUploadSession はメモリまたはディスクからIDでアップロードセッションを取得します。
+func (um *UploadManager) GetUploadSession(uploadID string) (*models.UploadSession, error) {
+	um.mu.RLock()
+	defer um.mu.RUnlock()
+
+	return um.findSession(uploadID)
+}
+
+// SaveChunk はデータのチャンクを一時ファイルの適切なオフセットに保存します。
+// アップロード済みチャンクを追跡し、セッションメタデータを更新します。
+func (um *UploadManager) SaveChunk(uploadID string, chunkNumber int, data []byte) error {
+	um.mu.Lock()
+	defer um.mu.Unlock()
+
+	session, err := um.findSession(uploadID)
+	if err != nil {
+		return ErrSessionNotFound
+	}
+	um.sessions[uploadID] = session
+
+	// 既にアップロード済みかチェック
+	for _, uploaded := range session.UploadedChunks {
+		if uploaded == chunkNumber {
+			return nil // 既にアップロード済み
+		}
+	}
+
+	// .tempファイルに書き込み
+	tempPath := um.getTempFilePath(uploadID, session.Filename, session.Directory)
+	// #nosec G304 - tempPath is constructed from sanitized inputs
+	file, err := os.OpenFile(tempPath, os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Error("ファイルのクローズに失敗しました", "error", err)
+		}
+	}()
+
+	// チャンクの位置にシーク
+	offset := int64(chunkNumber) * session.ChunkSize
+	if _, err := file.Seek(offset, 0); err != nil {
+		return err
+	}
+
+	// データ書き込み
+	if _, err := file.Write(data); err != nil {
+		return err
+	}
+
+	// アップロード済みチャンクリストに追加
+	session.UploadedChunks = append(session.UploadedChunks, chunkNumber)
+	session.UpdatedAt = time.Now()
+
+	// .metaファイル更新
+	return um.saveMetaFile(session)
+}
+
+// GetUploadedChunks は正常にアップロードされたチャンク番号のリストを返します。
+func (um *UploadManager) GetUploadedChunks(uploadID string) ([]int, error) {
+	um.mu.RLock()
+	defer um.mu.RUnlock()
+
+	session, err := um.findSession(uploadID)
+	if err != nil {
+		return nil, ErrSessionNotFound
+	}
+
+	return session.UploadedChunks, nil
+}
+
+// CompleteUpload は一時ファイルをリネームしてメタデータをクリーンアップすることでアップロードを完了します。
+// 完了前にすべてのチャンクがアップロード済みであることを検証します。
+func (um *UploadManager) CompleteUpload(uploadID string) (*SavedFile, error) {
+	um.mu.Lock()
+	defer um.mu.Unlock()
+
+	session, err := um.findSession(uploadID)
+	if err != nil {
+		return nil, ErrSessionNotFound
+	}
+
+	// 全チャンクがアップロード済みか確認
+	if len(session.UploadedChunks) != session.TotalChunks {
+		return nil, ErrIncompleteUpload
+	}
+
+	// .tempファイルを最終ファイルにリネーム
+	tempPath := um.getTempFilePath(uploadID, session.Filename, session.Directory)
+	fileID := uuid.New().String()
+	finalFilename := fmt.Sprintf("%s_%s", fileID, sanitizeFilename(session.Filename))
+	finalPath := filepath.Join(um.config.Storage.UploadPath, session.Directory, finalFilename)
+
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		return nil, err
+	}
+
+	// ファイルサイズ取得
+	fileInfo, err := os.Stat(finalPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// .metaファイル削除
+	metaPath := um.getMetaFilePath(uploadID, session.Filename, session.Directory)
+	if err := os.Remove(metaPath); err != nil && !os.IsNotExist(err) {
+		slog.Error("メタファイルの削除に失敗しました", "error", err)
+	}
+
+	// セッション削除
+	delete(um.sessions, uploadID)
+	um.releaseUploadSlot(session.UserID)
+
+	return &SavedFile{
+		Filename: finalFilename,
+		Path:     filepath.Join(session.Directory, finalFilename),
+		Size:     fileInfo.Size(),
+	}, nil
+}
+
+// CancelUpload はアップロードセッションをキャンセルし、関連するすべてのファイルを削除します。
+func (um *UploadManager) CancelUpload(uploadID string) error {
+	um.mu.Lock()
+	defer um.mu.Unlock()
+
+	session, err := um.findSession(uploadID)
+	if err != nil {
+		return ErrSessionNotFound
+	}
+
+	um.removeSession(uploadID, session)
+	return nil
+}
+
+// startCleanupRoutine は一定間隔で期限切れセッションを掃除するゴルーチンです。
+func (um *UploadManager) startCleanupRoutine() {
+	ticker := time.NewTicker(um.config.Storage.CleanupInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		um.cleanup()
+	}
+}
+
+// cleanup はメモリ上の期限切れセッションを削除し、ディスク上の孤立ファイルも掃除します。
+func (um *UploadManager) cleanup() {
+	um.mu.Lock()
+	defer um.mu.Unlock()
+
+	now := time.Now()
+	expiredSessions := make([]string, 0)
+
+	// メモリ内の期限切れセッションを収集
+	for uploadID, session := range um.sessions {
+		if now.After(session.ExpiresAt) {
+			expiredSessions = append(expiredSessions, uploadID)
+		}
+	}
+
+	// 期限切れセッションを削除
+	for _, uploadID := range expiredSessions {
+		um.removeSession(uploadID, um.sessions[uploadID])
+		slog.Info("期限切れセッションを削除しました", "upload_id", uploadID)
+	}
+
+	// ディスク上の古い.temp/.metaファイルもチェック
+	um.cleanupOrphanedFiles()
+}
+
+// cleanupOrphanedFiles は各ディレクトリを走査し、期限切れの.meta/.tempファイルを削除します。
+// メモリにセッションが残っていない再起動後のケースを想定した後始末です。
+func (um *UploadManager) cleanupOrphanedFiles() {
+	for _, dir := range um.config.Storage.Directories {
+		dirPath := filepath.Join(um.config.Storage.UploadPath, dir.Path)
+
+		if err := filepath.Walk(dirPath, func(path string, info fs.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return nil
+			}
+
+			// .metaファイルの場合
+			if filepath.Ext(path) == ".meta" {
+				// メタファイルから有効期限を読み取る
+				// #nosec G304 - path is from filepath.Walk which traverses only configured directories
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return nil
+				}
+
+				var session models.UploadSession
+				if err := json.Unmarshal(data, &session); err != nil {
+					return nil
+				}
+
+				// 期限切れなら削除
+				if time.Now().After(session.ExpiresAt) {
+					if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+						slog.Error("孤立ファイルの削除に失敗しました", "error", err)
+					}
+
+					// 対応する.tempファイルも削除
+					tempPath := path[:len(path)-5] + ".temp"
+					if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+						slog.Error("孤立ファイルの削除に失敗しました", "error", err)
+					}
+
+					slog.Info("孤立ファイルを削除しました", "path", path)
+				}
+			}
+
+			return nil
+		}); err != nil {
+			slog.Error("孤立ファイルのクリーンアップに失敗しました", "directory", dirPath, "error", err)
+		}
+	}
+}
+
+// saveMetaFile はセッションの状態を.metaファイルにJSONで永続化します。
+func (um *UploadManager) saveMetaFile(session *models.UploadSession) error {
+	metaPath := um.getMetaFilePath(session.UploadID, session.Filename, session.Directory)
+
+	data, err := json.MarshalIndent(session, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(metaPath, data, 0600)
+}
+
+// loadSessionFromMeta は全ディレクトリを検索し、.metaファイルからセッションを復元します。
+// 見つからない場合は ErrSessionNotFound を返します。
+func (um *UploadManager) loadSessionFromMeta(uploadID string) (*models.UploadSession, error) {
+	// 全ディレクトリを検索
+	for _, dir := range um.config.Storage.Directories {
+		metaPath := filepath.Join(um.config.Storage.UploadPath, dir.Path, uploadID+"_*.meta")
+		matches, err := filepath.Glob(metaPath)
+		if err != nil || len(matches) == 0 {
+			continue
+		}
+
+		data, err := os.ReadFile(matches[0])
+		if err != nil {
+			continue
+		}
+
+		var session models.UploadSession
+		if err := json.Unmarshal(data, &session); err != nil {
+			continue
+		}
+
+		return &session, nil
+	}
+
+	return nil, ErrSessionNotFound
+}
+
+// findSession はメモリから、無ければ.metaファイルからセッションを取得します。
+// 呼び出し側は um.mu を保持している必要があります（本関数はロックを取得しません）。
+func (um *UploadManager) findSession(uploadID string) (*models.UploadSession, error) {
+	if session, ok := um.sessions[uploadID]; ok {
+		return session, nil
+	}
+	return um.loadSessionFromMeta(uploadID)
+}
+
+// removeSession は一時ファイルとメタファイルを削除し、セッション管理情報を破棄します。
+// 呼び出し側は um.mu の書き込みロックを保持している必要があります。
+func (um *UploadManager) removeSession(uploadID string, session *models.UploadSession) {
+	tempPath := um.getTempFilePath(uploadID, session.Filename, session.Directory)
+	if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+		slog.Error("一時ファイルの削除に失敗しました", "error", err)
+	}
+
+	metaPath := um.getMetaFilePath(uploadID, session.Filename, session.Directory)
+	if err := os.Remove(metaPath); err != nil && !os.IsNotExist(err) {
+		slog.Error("メタファイルの削除に失敗しました", "error", err)
+	}
+
+	delete(um.sessions, uploadID)
+	um.releaseUploadSlot(session.UserID)
+}
+
+// releaseUploadSlot はユーザーの同時アップロード数を1減らします。
+// .metaから復元したセッション（再起動でカウンタ未加算）を破棄しても
+// カウンタが負値にならないよう下限を0で保護し、0になった要素は取り除きます。
+func (um *UploadManager) releaseUploadSlot(userID string) {
+	if um.userUploads[userID] <= 1 {
+		delete(um.userUploads, userID)
+		return
+	}
+	um.userUploads[userID]--
+}
+
+// sessionFilePath はセッションに紐づくファイル（.temp/.meta）のパスを組み立てます。
+func (um *UploadManager) sessionFilePath(uploadID, filename, directory, ext string) string {
+	name := fmt.Sprintf("%s_%s%s", uploadID, sanitizeFilename(filename), ext)
+	return filepath.Join(um.config.Storage.UploadPath, directory, name)
+}
+
+// getTempFilePath .tempファイルパス取得
+func (um *UploadManager) getTempFilePath(uploadID, filename, directory string) string {
+	return um.sessionFilePath(uploadID, filename, directory, ".temp")
+}
+
+// getMetaFilePath .metaファイルパス取得
+func (um *UploadManager) getMetaFilePath(uploadID, filename, directory string) string {
+	return um.sessionFilePath(uploadID, filename, directory, ".meta")
+}
+
+// GetAllUploadSessions は現在進行中のすべてのアップロードセッション情報を取得します（管理者用）。
+func (um *UploadManager) GetAllUploadSessions() []*models.UploadSession {
+	um.mu.RLock()
+	defer um.mu.RUnlock()
+
+	sessions := make([]*models.UploadSession, 0, len(um.sessions))
+	for _, session := range um.sessions {
+		sessions = append(sessions, session)
+	}
+
+	return sessions
+}
