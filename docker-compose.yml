@@ -2,10 +2,15 @@ services:
   fileserver:
     build: .
     container_name: fileserver
+    # 実行UID/GID。bindマウントへ書き込むファイルの所有者はこのUID/GIDになる。
+    # PUID/PGIDを .env でホストユーザー（id -u / id -g）に合わせると、
+    # 生成ファイルをホストユーザーがそのまま管理・削除できる。
+    # 未指定時はイメージ既定の非rootユーザー(65532)で動作する（後方互換）。
+    user: "${PUID:-65532}:${PGID:-65532}"
     ports:
       - "8080:8080"
-    # ボリューム。コンテナは非rootユーザー(UID 65532)で動作するため、
-    # ホスト側ディレクトリは 65532 が書き込める必要がある（下記参照）。
+    # ボリューム。ホスト側 ./config ./data は上記 user が書き込める必要がある。
+    # 例: mkdir -p config data && sudo chown -R "$(id -u):$(id -g)" config data
     volumes:
       - ./config:/app/config
       - ./data:/app/data

@@ -81,6 +81,7 @@ docker buildx build -t filego:dhi \
 docker compose -f docker-compose.deploy.yml down
 
 # 2. ホスト側データの所有者を実行ユーザー(65532)へ変更
+#    （.env に PUID/PGID を設定した場合は、そのUID/GIDへ合わせる）
 sudo chown -R 65532:65532 ./config ./data
 
 # 3. config.yaml 内の絶対パスを更新（/root → /app）
@@ -91,6 +92,30 @@ docker compose -f docker-compose.deploy.yml up -d
 ```
 
 > ログはファイル(`/root/logs`)ではなく標準出力へ出力される方式に統一されたため、`logs` ボリュームは不要になりました。
+
+### 実行ユーザーをホストユーザーに合わせる（PUID/PGID）
+
+bindマウント（`./config` `./data`）を使う構成では、コンテナが書き込むファイルの
+所有者はコンテナの実行UID/GIDになります。既定では非rootユーザー(65532)のため、
+ホスト側ではそのファイルを削除・編集するのに `sudo` が必要になります。
+
+`.env` の `PUID`/`PGID` をホストユーザーに合わせると、生成ファイルの所有者が
+ホストユーザーになり、root権限なしで管理できます。
+
+```bash
+# 1. .env に実行UID/GIDを設定（自分のIDに合わせる）
+echo "PUID=$(id -u)" >> .env
+echo "PGID=$(id -g)" >> .env
+
+# 2. ホスト側ディレクトリの所有者も同じUID/GIDに揃える
+mkdir -p config data
+sudo chown -R "$(id -u):$(id -g)" config data
+
+# 3. 起動（compose の user: "${PUID:-65532}:${PGID:-65532}" が適用される）
+docker compose -f docker-compose.deploy.yml up -d
+```
+
+`PUID`/`PGID` を未設定のままにすると、従来どおりイメージ既定の65532で動作します。
 
 ### デプロイ後の確認
 

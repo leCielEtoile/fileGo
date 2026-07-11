@@ -335,7 +335,7 @@ lsof -i :8080
 
 **確認項目:**
 1. ✅ ボリュームマウント（`./config:/app/config`）が正しいか
-2. ✅ ホスト側の `config` ディレクトリが非rootユーザー(UID 65532)から書き込めるか
+2. ✅ ホスト側の `config` ディレクトリが実行UID/GID（既定は65532、`.env` の `PUID`/`PGID` で変更可）から書き込めるか
 
 **解決方法:**
 ```bash
@@ -343,11 +343,20 @@ lsof -i :8080
 docker compose -f docker-compose.deploy.yml logs | grep "設定ファイル"
 
 # ホスト側ディレクトリの所有者を実行ユーザーに合わせる
+# 既定(65532)のまま使う場合:
 sudo chown -R 65532:65532 ./config ./data
+# ホストユーザーで動かす場合（.env に PUID/PGID を設定した場合）:
+#   sudo chown -R "$(id -u):$(id -g)" ./config ./data
 
 # 再起動
 docker compose -f docker-compose.deploy.yml restart
 ```
+
+> **補足**: `.env` に `PUID`/`PGID` を設定すると、コンテナはそのUID/GIDで動作し、
+> `./config` `./data` に生成されるファイルの所有者もそれに一致します。
+> ホストユーザーの `id -u` / `id -g` に合わせておくと、生成ファイルを
+> root権限なしで管理・削除できます。ホスト側ディレクトリの所有者も
+> 同じUID/GIDに揃えてから起動してください。
 
 ## 次のステップ
 

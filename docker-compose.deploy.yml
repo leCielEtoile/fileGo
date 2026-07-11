@@ -5,13 +5,19 @@ services:
     image: ghcr.io/lecieletoile/filego:${IMAGE_TAG:-latest}
     container_name: fileserver
 
+    # 実行UID/GID。bindマウントへ書き込むファイルの所有者はこのUID/GIDになる。
+    # PUID/PGIDを .env でホストユーザー（id -u / id -g）に合わせると、
+    # 生成ファイルをホストユーザーがそのまま管理・削除できる。
+    # 未指定時はイメージ既定の非rootユーザー(65532)で動作する（後方互換）。
+    user: "${PUID:-65532}:${PGID:-65532}"
+
     # ポート設定
     ports:
       - "${HOST_PORT:-8080}:8080"
 
     # ボリュームマウント
-    # コンテナは非rootユーザー(UID 65532)で動作するため、ホスト側ディレクトリは
-    # 65532 が書き込める必要がある（例: chown -R 65532:65532 ./config ./data）。
+    # ホスト側ディレクトリは上記 user が書き込める必要がある。
+    # 例: mkdir -p config data && sudo chown -R "$(id -u):$(id -g)" config data
     volumes:
       # 設定ファイルとデータベース（初回起動時に自動生成）
       - ./config:/app/config:rw
