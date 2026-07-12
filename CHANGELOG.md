@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-12
+
+最初のベータリリース。
+
 ### Added（追加）
 - Discordゲートウェイによるロールの**リアルタイム同期**（Tier1）。起動時に全メンバーを一括ロードし、以後 `GuildMemberAdd/Update/Remove` でメモリを常時最新化。準備完了後はロール／在籍参照がREST APIを介さずメモリで解決される。
 - ロール変更を即座にUIへ反映する SSE イベント `permissions_updated`。フロントは受信時にアクセス可能ディレクトリを再取得する。
@@ -38,4 +42,5 @@
 
 ---
 
-初回リリース前のため、上記はすべて未リリースの変更です。最初のタグ付け時に本セクションをバージョン見出しへ移動します。
+[Unreleased]: https://github.com/leCielEtoile/fileGo/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/leCielEtoile/fileGo/releases/tag/v0.1.0
