@@ -69,8 +69,9 @@ type DiscordConfig struct {
 }
 
 // DiscordProvider はDiscordをこのアプリケーションで唯一のOAuth2実装として提供する
-// Providerです。DiscordはOIDCを提供していないため、OAuth2 + REST APIで
-// Provider インターフェースを満たします。
+// Providerです。DiscordはOIDCを提供していないため、ログインはOAuth2、ロール/在籍の
+// 参照はBot REST（キャッシュ付き）で Provider インターフェースを満たします。
+// さらにゲートウェイ同期が有効な場合は、ロール/在籍参照をメモリ解決へ切り替えます。
 type DiscordProvider struct {
 	oauthConfig *oauth2.Config
 	httpClient  *http.Client

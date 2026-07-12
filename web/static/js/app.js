@@ -104,11 +104,13 @@ function showWelcomeScreen() {
 }
 
 // ディレクトリ一覧読み込み（Skeleton loading対応）
-async function loadDirectories() {
+async function loadDirectories(showSkeleton = true) {
     const container = document.getElementById('directory-list');
 
-    // Skeleton表示
-    showDirectorySkeleton();
+    // Skeleton表示（バックグラウンド更新時はちらつきを避けるため出さない）
+    if (showSkeleton) {
+        showDirectorySkeleton();
+    }
 
     try {
         const response = await fetch('/files/directories', {
@@ -1051,6 +1053,35 @@ function connectSSE() {
         const data = JSON.parse(e.data);
         addActivityLog('login', `${data.username} がログインしました`, true);
     });
+
+    // 権限更新イベント（サーバー側でロールが変わった＝アクセス可能ディレクトリが変化）
+    eventSource.addEventListener('permissions_updated', () => {
+        handlePermissionsUpdated();
+    });
+}
+
+// 権限が変化したときに、アクセス可能ディレクトリと現在の選択を再同期する。
+async function handlePermissionsUpdated() {
+    const previous = state.selectedDirectory;
+
+    // ちらつきを避けるためSkeletonなしで一覧を取り直す。
+    await loadDirectories(false);
+
+    if (previous) {
+        const stillAccessible = state.directories.some(d => d.path === previous);
+        if (stillAccessible) {
+            // read/write/delete などの実効権限が変わった可能性があるため再読み込みする。
+            await loadFiles(previous);
+        } else {
+            // 選択中ディレクトリへのアクセス権を失った場合は選択を解除する。
+            state.selectedDirectory = null;
+            updateBreadcrumb();
+            showWelcomeScreen();
+            if (window.toast) toast.info('このフォルダへのアクセス権が変更されました');
+        }
+    }
+
+    addActivityLog('permission', '権限が更新されました', true);
 }
 
 // アクティビティログ追加
@@ -1063,7 +1094,8 @@ function addActivityLog(type, message, fromSSE = false) {
         'upload': '<svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>',
         'download': '<svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>',
         'delete': '<svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>',
-        'error': '<svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+        'error': '<svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+        'permission': '<svg class="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>'
     };
     const icon = iconMap[type] || iconMap['error'];
 
