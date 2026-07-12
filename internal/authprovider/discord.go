@@ -327,7 +327,10 @@ func (p *DiscordProvider) fetchMember(ctx context.Context, subject string) (role
 		}
 		return nil, false, err
 	}
-	res := v.(memberResult)
+	res, ok := v.(memberResult)
+	if !ok {
+		return nil, false, fmt.Errorf("メンバー取得結果の型が不正です")
+	}
 	return res.roles, res.isMember, nil
 }
 

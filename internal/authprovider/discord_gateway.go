@@ -71,16 +71,23 @@ func (gs *gatewaySync) Start(ctx context.Context, readyTimeout time.Duration) er
 	for {
 		select {
 		case <-ctx.Done():
-			_ = gs.session.Close()
+			gs.closeQuietly()
 			return ctx.Err()
 		case <-deadline.C:
-			_ = gs.session.Close()
+			gs.closeQuietly()
 			return errGatewayNotReady
 		case <-tick.C:
 			if gs.ready.Load() {
 				return nil
 			}
 		}
+	}
+}
+
+// closeQuietly はセッションを閉じ、失敗はログのみに留めます（クリーンアップ経路のため）。
+func (gs *gatewaySync) closeQuietly() {
+	if err := gs.session.Close(); err != nil {
+		slog.Debug("ゲートウェイのクローズに失敗しました", "error", err)
 	}
 }
 
@@ -152,13 +159,13 @@ func (gs *gatewaySync) handleMemberUpdate(_ *discordgo.Session, e *discordgo.Gui
 }
 
 func (gs *gatewaySync) handleMemberRemove(_ *discordgo.Session, e *discordgo.GuildMemberRemove) {
-	if e.Member == nil || e.Member.GuildID != gs.guildID || e.Member.User == nil {
+	if e.Member == nil || e.User == nil || e.GuildID != gs.guildID {
 		return
 	}
 	gs.mu.Lock()
-	delete(gs.members, e.Member.User.ID)
+	delete(gs.members, e.User.ID)
 	gs.mu.Unlock()
-	gs.notify(e.Member.User.ID)
+	gs.notify(e.User.ID)
 }
 
 // upsert はメンバーのロールを更新し、同期完了後は変更を通知します。
