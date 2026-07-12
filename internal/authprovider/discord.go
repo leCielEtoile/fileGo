@@ -6,14 +6,22 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/singleflight"
+	"golang.org/x/time/rate"
 )
 
 const discordAPIBase = "https://discord.com/api/v10"
+
+// discordRequestsPerSecond はBotトークンでのAPI呼び出しの上限レートです。
+// Discordのグローバル上限（およそ毎秒50）を十分下回る値にし、多人数の
+// キャッシュ更新が偶然重なっても 429 を踏まないようにします。
+const discordRequestsPerSecond = 25
 
 // discordUser はDiscordの `/users/@me` レスポンスを表します。
 type discordUser struct {
@@ -41,6 +49,12 @@ type roleCacheEntry struct {
 	isMember  bool
 }
 
+// memberResult は singleflight で共有するメンバー取得結果です。
+type memberResult struct {
+	roles    []string
+	isMember bool
+}
+
 // DiscordConfig はDiscordプロバイダーの設定を表します。
 type DiscordConfig struct {
 	Name         string
@@ -64,6 +78,11 @@ type DiscordProvider struct {
 	cacheMutex sync.RWMutex
 	cache      map[string]*roleCacheEntry
 	cacheTTL   time.Duration
+
+	// limiter はDiscordへのライブ取得を毎秒レートで絞り、更新の殺到を平準化します。
+	limiter *rate.Limiter
+	// sf は同一ユーザーへの同時ライブ取得を1回のAPI呼び出しに集約します。
+	sf singleflight.Group
 }
 
 // NewDiscordProvider はDiscordProviderを作成します。
@@ -91,7 +110,19 @@ func NewDiscordProvider(cfg DiscordConfig) *DiscordProvider {
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 		cache:      make(map[string]*roleCacheEntry),
 		cacheTTL:   5 * time.Minute,
+		limiter:    rate.NewLimiter(rate.Limit(discordRequestsPerSecond), discordRequestsPerSecond),
 	}
+}
+
+// ttlWithJitter はキャッシュ有効期限に 0〜TTL/5 のランダムな上乗せをして返します。
+// 同時刻にログイン/接続した多数のエントリの期限が揃って一斉更新（サンダリングハード）に
+// なるのを防ぎ、更新タイミングを時間方向へ散らします。
+func (p *DiscordProvider) ttlWithJitter() time.Duration {
+	spread := int64(p.cacheTTL / 5)
+	if spread <= 0 {
+		return p.cacheTTL
+	}
+	return p.cacheTTL + time.Duration(rand.Int64N(spread))
 }
 
 // Name はプロバイダー名を返します。
@@ -220,7 +251,14 @@ func (p *DiscordProvider) fetchMember(ctx context.Context, subject string) (role
 		return staleRoles, staleMember, nil
 	}
 
-	roles, isMember, err = p.fetchMemberLive(ctx, subject)
+	// 同一ユーザーへの同時ミスは1回のライブ取得に集約する（重複APIコールの排除）。
+	v, err, _ := p.sf.Do(subject, func() (interface{}, error) {
+		r, m, liveErr := p.fetchMemberLive(ctx, subject)
+		if liveErr != nil {
+			return nil, liveErr
+		}
+		return memberResult{roles: r, isMember: m}, nil
+	})
 	if err != nil {
 		if exists {
 			slog.Warn("Discord APIの取得に失敗したため期限切れキャッシュを使用します（stale-while-error）",
@@ -229,12 +267,18 @@ func (p *DiscordProvider) fetchMember(ctx context.Context, subject string) (role
 		}
 		return nil, false, err
 	}
-	return roles, isMember, nil
+	res := v.(memberResult)
+	return res.roles, res.isMember, nil
 }
 
 // fetchMemberLive はキャッシュを介さずDiscord APIからメンバー情報を取得し、結果をキャッシュします。
 // ギルドに存在しない場合は isMember=false を返し、エラーとはしません。
 func (p *DiscordProvider) fetchMemberLive(ctx context.Context, subject string) (roles []string, isMember bool, err error) {
+	// グローバルレート上限を超えないよう、送信前にトークンの発行を待つ。
+	if err := p.limiter.Wait(ctx); err != nil {
+		return nil, false, fmt.Errorf("レート制限待機の中断: %w", err)
+	}
+
 	url := fmt.Sprintf("%s/guilds/%s/members/%s", discordAPIBase, p.guildID, subject)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -264,7 +308,7 @@ func (p *DiscordProvider) fetchMemberLive(ctx context.Context, subject string) (
 	case http.StatusNotFound:
 		// ギルドに存在しない（退出済み等）。在籍なしとしてキャッシュする。
 		p.cacheMutex.Lock()
-		p.cache[subject] = &roleCacheEntry{expiresAt: time.Now().Add(p.cacheTTL), isMember: false}
+		p.cache[subject] = &roleCacheEntry{expiresAt: time.Now().Add(p.ttlWithJitter()), isMember: false}
 		p.cacheMutex.Unlock()
 		return nil, false, nil
 	case http.StatusUnauthorized, http.StatusForbidden:
@@ -297,7 +341,7 @@ func (p *DiscordProvider) fetchMemberLive(ctx context.Context, subject string) (
 	p.cacheMutex.Lock()
 	p.cache[subject] = &roleCacheEntry{
 		roles:     member.Roles,
-		expiresAt: time.Now().Add(p.cacheTTL),
+		expiresAt: time.Now().Add(p.ttlWithJitter()),
 		isMember:  true,
 	}
 	p.cacheMutex.Unlock()

@@ -212,6 +212,62 @@ func (pc *Checker) GetAccessibleDirectories(userID string) ([]AccessibleDirector
 	return accessible, nil
 }
 
+// ReadFilter はあるユーザーの「読み取り可能なディレクトリ」を静的スナップショットとして保持します。
+// SSE配信のホットパスでロールをその都度問い合わせず、メモリ上の集合判定だけで
+// イベントの可視性を決めるために使います。
+type ReadFilter struct {
+	dirs  map[string]bool
+	admin bool
+}
+
+// CanRead はディレクトリ（またはその配下）を読み取れるかを返します。
+// admin は全ディレクトリを読めるため常に真を返します。
+func (f *ReadFilter) CanRead(directory string) bool {
+	if f == nil {
+		return false
+	}
+	if f.admin {
+		return true
+	}
+	for allowed := range f.dirs {
+		if directory == allowed || strings.HasPrefix(directory, allowed+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// ReadFilterFor はユーザーの読み取り可能ディレクトリのスナップショットを構築します。
+// ロール取得は（キャッシュ経由で）ここで一度だけ行い、以降のイベント判定を
+// I/Oなしにします。SSE接続時と定期リフレッシュ時に呼び出す想定です。
+func (pc *Checker) ReadFilterFor(userID string) (*ReadFilter, error) {
+	dirs, err := pc.GetAccessibleDirectories(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	set := make(map[string]bool, len(dirs))
+	for _, d := range dirs {
+		for _, p := range d.Permissions {
+			if p == "read" {
+				set[d.Path] = true
+				break
+			}
+		}
+	}
+
+	// 管理者は他ユーザーのuser_privateも読めるが、それらは列挙に含まれないため
+	// フラグで全許可する（GetAccessibleDirectoriesは本人のuser_dirのみ返す）。
+	admin, err := pc.isAdmin(userID)
+	if err != nil {
+		// ロール取得はGetAccessibleDirectoriesと同一キャッシュを引くため通常は失敗しない。
+		// 失敗時は安全側（非管理者）に倒す。
+		admin = false
+	}
+
+	return &ReadFilter{dirs: set, admin: admin}, nil
+}
+
 // toSet は文字列スライスを集合に変換します。
 func toSet(items []string) map[string]bool {
 	set := make(map[string]bool, len(items))

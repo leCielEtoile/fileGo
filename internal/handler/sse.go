@@ -6,11 +6,16 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"fileserver/internal/models"
 	"fileserver/internal/permission"
 )
+
+// sseFilterRefreshInterval は各接続の読み取り可能ディレクトリ集合を
+// 再解決する間隔です。ロール変更（プロバイダー側）を反映するために定期更新します。
+const sseFilterRefreshInterval = 5 * time.Minute
 
 // SSEEvent はイベントの種類を表します。
 // Directory が非空のイベントは、そのディレクトリへの read 権限を持つ
@@ -22,10 +27,13 @@ type SSEEvent struct {
 }
 
 // sseClient は接続中のSSEクライアント1件を表します。
-// userID はイベント毎のディレクトリ権限フィルタに使用します。
+// filter は接続時に解決した「読み取り可能ディレクトリ」のスナップショットで、
+// 配信のたびにロールを問い合わせないためのものです。HandleSSEのゴルーチンが
+// 定期更新し、broadcastのゴルーチンが読むため、atomicポインタでロックなしに共有します。
 type sseClient struct {
 	ch     chan SSEEvent
 	userID string
+	filter atomic.Pointer[permission.ReadFilter]
 }
 
 // SSEHandler はServer-Sent Eventsハンドラーを表します。
@@ -64,6 +72,10 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	// バッファ付きにして、遅い/切断済みクライアントがbroadcastをブロックしないようにする。
 	client := &sseClient{ch: make(chan SSEEvent, 10), userID: user.ID}
 
+	// 接続時に読み取り可能ディレクトリを一度だけ解決してスナップショット化する。
+	// 以降の配信判定はこの集合を見るだけで、ロールの都度取得（＝外部APIの殺到）を避ける。
+	h.refreshFilter(client)
+
 	h.mu.Lock()
 	h.clients[client] = true
 	clientCount := len(h.clients)
@@ -97,10 +109,17 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
+	// ロール変更を反映するため、権限スナップショットを定期的に取り直す。
+	filterTicker := time.NewTicker(sseFilterRefreshInterval)
+	defer filterTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+
+		case <-filterTicker.C:
+			h.refreshFilter(client)
 
 		case event := <-client.ch:
 			jsonData, err := json.Marshal(event.Data)
@@ -209,21 +228,30 @@ func (h *SSEHandler) broadcast(event SSEEvent) {
 }
 
 // canReceive はクライアントがイベントを受信してよいかを判定します。
-// ディレクトリ付きイベントは read 権限を要求し、権限確認に失敗した場合は
-// 情報漏えいを避けるため配信しません（フェイルクローズ）。
+// ディレクトリ付きイベントは、接続時に解決済みの読み取り可能集合に含まれる場合のみ
+// 配信します（スナップショット未解決なら情報漏えいを避けフェイルクローズ）。
 func (h *SSEHandler) canReceive(client *sseClient, event SSEEvent) bool {
 	if event.Directory == "" {
 		return true
 	}
+	return client.filter.Load().CanRead(event.Directory)
+}
+
+// refreshFilter はクライアントの読み取り可能ディレクトリのスナップショットを取り直します。
+// 解決に失敗した場合は既存スナップショットを維持し、無ければ空（全拒否）を設定します。
+func (h *SSEHandler) refreshFilter(client *sseClient) {
 	if h.permissionChecker == nil {
-		return false
+		return
 	}
-	allowed, err := h.permissionChecker.CheckPermission(client.userID, event.Directory, "read")
+	filter, err := h.permissionChecker.ReadFilterFor(client.userID)
 	if err != nil {
-		slog.Debug("SSE権限チェックに失敗したためイベントを抑止しました", "user_id", client.userID, "directory", event.Directory, "error", err)
-		return false
+		slog.Debug("SSE権限スナップショットの更新に失敗しました", "user_id", client.userID, "error", err)
+		if client.filter.Load() == nil {
+			client.filter.Store(&permission.ReadFilter{})
+		}
+		return
 	}
-	return allowed
+	client.filter.Store(filter)
 }
 
 // GetClientCount は接続中のクライアント数を取得します。
