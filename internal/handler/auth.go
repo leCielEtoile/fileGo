@@ -210,6 +210,14 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+// currentUserResponse は /api/user の応答です。
+// models.User の各フィールドに加え、フロントが管理者用UI（adminリンク等）を
+// 出し分けられるよう is_admin を含めます。
+type currentUserResponse struct {
+	*models.User
+	IsAdmin bool `json:"is_admin"`
+}
+
 // GetCurrentUser は現在認証されているユーザー情報を返します。
 func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	user, ok := userFromContext(w, r)
@@ -217,7 +225,16 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, user)
+	// 管理者判定はAdminMiddlewareと同じくロール取得＋設定照合で行う。
+	// ロール取得失敗時は権限を広げないよう非管理者として扱う。
+	isAdmin := false
+	if roles, err := h.provider.GetUserRoles(r.Context(), user.Subject); err != nil {
+		slog.WarnContext(r.Context(), "管理者判定のためのロール取得に失敗しました（非管理者として扱います）", "error", err, "user_id", user.ID)
+	} else {
+		isAdmin = h.config.HasAdminRole(roles)
+	}
+
+	writeJSON(w, http.StatusOK, currentUserResponse{User: user, IsAdmin: isAdmin})
 }
 
 func (h *AuthHandler) upsertUser(userID string, info *authprovider.UserInfo) error {

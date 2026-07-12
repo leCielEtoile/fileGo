@@ -66,8 +66,15 @@ function showAppSection() {
 
     // ユーザー情報表示（Tailwind スタイル）
     const userInfo = document.getElementById('user-info');
+    // 管理者にのみ管理ページへのリンクを表示する（is_admin はサーバーが判定）。
+    const adminLink = state.user.is_admin ? `
+        <a href="/admin" class="px-3 py-1.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors whitespace-nowrap flex-shrink-0">
+            管理
+        </a>
+    ` : '';
     userInfo.innerHTML = `
         <span class="text-gray-700 dark:text-gray-200 font-medium truncate max-w-[8rem]">${escapeHtml(state.user.username)}</span>
+        ${adminLink}
         <a href="/auth/logout" class="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors whitespace-nowrap flex-shrink-0">
             ログアウト
         </a>
