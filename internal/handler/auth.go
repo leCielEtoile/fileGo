@@ -45,7 +45,12 @@ func (h *AuthHandler) SetSSEHandler(sse *SSEHandler) {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	p := h.provider
 
-	state := generateRandomString(32)
+	state, err := generateRandomString(32)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "state生成エラー", "error", err)
+		http.Error(w, "内部エラーが発生しました", http.StatusInternalServerError)
+		return
+	}
 
 	// CSRF対策のstateをクッキーに保存し、コールバックで照合する
 	// #nosec G124 - Secureは設定(SecureCookie)由来。HttpOnly/SameSiteも設定済み
@@ -125,7 +130,8 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// OIDCなど誰でもログインできるプロバイダーでは事前作成せず、
 	// 初回アップロード時に作成する（それまで自分のディレクトリは閲覧できない）。
 	if h.storageManager != nil && p.PrecreateUserDirectory() {
-		if ensureErr := h.storageManager.EnsureUserDirectory(userInfo.Username); ensureErr != nil {
+		dirName := models.SanitizeDirName(userInfo.Username)
+		if ensureErr := h.storageManager.EnsureUserDirectory(dirName); ensureErr != nil {
 			slog.ErrorContext(r.Context(), "ユーザーディレクトリ作成エラー", "error", ensureErr, "username", userInfo.Username)
 			// エラーが発生してもログインは継続（次回アップロード時に再試行される）
 		} else {
@@ -133,7 +139,12 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sessionToken := generateRandomString(64)
+	sessionToken, err := generateRandomString(64)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "セッショントークン生成エラー", "error", err)
+		http.Error(w, "内部エラーが発生しました", http.StatusInternalServerError)
+		return
+	}
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
 	// プロバイダーのアクセストークン/リフレッシュトークンはログイン後に再利用しないため
@@ -223,19 +234,15 @@ func (h *AuthHandler) upsertUser(userID string, info *authprovider.UserInfo) err
 	return err
 }
 
-func generateRandomString(length int) string {
+// generateRandomString は length 文字の暗号学的乱数トークンを生成します。
+// 予測可能な値をセッショントークン/stateに使わないため、乱数取得に失敗した場合は
+// フォールバックせずエラーを返します（フェイルクローズ）。
+func generateRandomString(length int) (string, error) {
 	// base64符号化はバイト数より長い文字列になるため、length バイト読めば
 	// 末尾を[:length]で切り出しても足りる。
 	bytes := make([]byte, length)
 	if _, err := rand.Read(bytes); err != nil {
-		// フォールバックのseedがlengthより短いと[:length]でパニックするため、
-		// 必要長まで繰り返して埋める。
-		slog.Error("暗号乱数の生成に失敗しました。フォールバックを使用します", "error", err)
-		seed := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
-		for len(seed) < length {
-			seed += seed
-		}
-		return seed[:length]
+		return "", fmt.Errorf("暗号乱数の生成に失敗しました: %w", err)
 	}
-	return base64.URLEncoding.EncodeToString(bytes)[:length]
+	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
 }

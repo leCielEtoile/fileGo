@@ -140,6 +140,23 @@ func main() {
 		}
 	}()
 
+	// 期限切れセッション行を定期的に掃除する（起動直後に一度、以後1時間毎）。
+	go func() {
+		cleanup := func() {
+			if n, err := database.DeleteExpiredSessions(context.Background(), db); err != nil {
+				slog.Error("期限切れセッションの削除に失敗しました", "error", err)
+			} else if n > 0 {
+				slog.Info("期限切れセッションを削除しました", "count", n)
+			}
+		}
+		cleanup()
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			cleanup()
+		}
+	}()
+
 	storageManager := storage.NewManager(cfg, db)
 	if err := storageManager.InitializeDirectories(); err != nil {
 		slog.Error("ストレージディレクトリの初期化に失敗しました", "error", err)
@@ -157,7 +174,7 @@ func main() {
 	}
 
 	permissionChecker := permission.NewChecker(cfg, authProvider, storageManager, db)
-	sseHandler := handler.NewSSEHandler()
+	sseHandler := handler.NewSSEHandler(permissionChecker)
 
 	// テンプレートはリクエスト毎の再パースを避けるため起動時に一度だけパースする。
 	indexTmpl := loadTemplate("web/templates/index.html")

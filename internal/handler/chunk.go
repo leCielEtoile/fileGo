@@ -16,7 +16,19 @@ import (
 	"fileserver/internal/storage"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
+
+// validUploadID は upload_id が正規のUUIDであることを検証します。
+// 未検証のIDは loadSessionFromMeta の filepath.Glob に渡り得るため、
+// グロブメタ文字やパス片の混入をハンドラ入口で弾きます。不正時は400を書き込みます。
+func validUploadID(w http.ResponseWriter, uploadID string) bool {
+	if _, err := uuid.Parse(uploadID); err != nil {
+		http.Error(w, "無効なアップロードIDです", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
 
 // writeChunkError はストレージ層のエラーを適切なHTTPステータスに変換して応答します。
 func writeChunkError(w http.ResponseWriter, err error) {
@@ -136,6 +148,9 @@ func (h *ChunkHandler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uploadID := chi.URLParam(r, "upload_id")
+	if !validUploadID(w, uploadID) {
+		return
+	}
 	chunkIndexStr := r.URL.Query().Get("chunk_index")
 
 	chunkIndex, err := strconv.Atoi(chunkIndexStr)
@@ -186,6 +201,9 @@ func (h *ChunkHandler) GetChunkStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uploadID := chi.URLParam(r, "upload_id")
+	if !validUploadID(w, uploadID) {
+		return
+	}
 
 	session, err := h.uploadManager.GetUploadSession(uploadID)
 	if err != nil {
@@ -220,6 +238,9 @@ func (h *ChunkHandler) CompleteChunkUpload(w http.ResponseWriter, r *http.Reques
 	}
 
 	uploadID := chi.URLParam(r, "upload_id")
+	if !validUploadID(w, uploadID) {
+		return
+	}
 
 	savedFile, err := h.uploadManager.CompleteUpload(uploadID, user.ID)
 	if err != nil {
@@ -254,6 +275,9 @@ func (h *ChunkHandler) CancelChunkUpload(w http.ResponseWriter, r *http.Request)
 	}
 
 	uploadID := chi.URLParam(r, "upload_id")
+	if !validUploadID(w, uploadID) {
+		return
+	}
 
 	if err := h.uploadManager.CancelUpload(uploadID, user.ID); err != nil {
 		slog.ErrorContext(r.Context(), "アップロードキャンセルエラー", "upload_id", uploadID, "error", err)

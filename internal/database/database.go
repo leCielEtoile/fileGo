@@ -44,6 +44,17 @@ func Initialize(dbPath string, maxConns int) (*sql.DB, error) {
 	return db, nil
 }
 
+// DeleteExpiredSessions は期限切れのセッション行を物理削除し、削除件数を返します。
+// AuthMiddleware は期限切れセッションを検証時に弾きますが行は残るため、
+// テーブルの単調増加を防ぐために定期的な掃除に使います。
+func DeleteExpiredSessions(ctx context.Context, db *sql.DB) (int64, error) {
+	res, err := db.ExecContext(ctx, "DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP")
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func createTables(db *sql.DB) error {
 	schema := `
 	-- access_logs は未使用のため廃止。既存DBからも確実に取り除く。

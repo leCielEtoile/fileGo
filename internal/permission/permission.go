@@ -12,6 +12,7 @@ import (
 
 	"fileserver/internal/authprovider"
 	"fileserver/internal/config"
+	"fileserver/internal/models"
 	"fileserver/internal/storage"
 )
 
@@ -151,7 +152,9 @@ func (pc *Checker) getUserDirectoryName(userID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("ユーザー名の取得に失敗しました: %w", err)
 	}
-	return username, nil
+	// ディレクトリ作成側（GetDirectoryName）と同じ正規化を施し、
+	// 権限判定対象のパスと実ディレクトリ名を一致させる。
+	return models.SanitizeDirName(username), nil
 }
 
 // GetAccessibleDirectories はユーザーがアクセスできるディレクトリと実効権限のリストを返します。

@@ -109,23 +109,48 @@ func RealIP(behindProxy bool, trustedProxies []string) func(http.Handler) http.H
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if behindProxy {
-				// 直前のホップが信頼済みプロキシのときだけXFFを採用する。
-				// そうでなければクライアントがRemoteAddrを詐称できてしまう。
-				xForwardedFor := r.Header.Get("X-Forwarded-For")
-				if xForwardedFor != "" {
-					ips := strings.Split(xForwardedFor, ",")
-					if len(ips) > 0 {
-						remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr) // nolint:errcheck
-						if isTrustedProxy(remoteIP, trustedProxies) {
-							r.RemoteAddr = strings.TrimSpace(ips[0])
-						}
-					}
+				if clientIP := clientIPFromXFF(r, trustedProxies); clientIP != "" {
+					r.RemoteAddr = clientIP
 				}
 			}
 
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// clientIPFromXFF は X-Forwarded-For から実クライアントIPを求めます。
+// 直前のホップ(RemoteAddr)が信頼済みプロキシの場合にのみXFFを参照し、
+// 右端（最も手前のプロキシが付与した値）から信頼済みプロキシを剥がして、
+// 最初に現れる非信頼IPをクライアントとみなします。左端を無条件に信頼すると、
+// クライアントがXFFを注入して任意IPを詐称できてしまうため、それを防ぎます。
+// 採用すべき値が無い場合は空文字を返します（呼び出し側はRemoteAddrを維持）。
+func clientIPFromXFF(r *http.Request, trustedProxies []string) string {
+	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteIP = r.RemoteAddr
+	}
+	if !isTrustedProxy(remoteIP, trustedProxies) {
+		return ""
+	}
+
+	xff := r.Header.Get("X-Forwarded-For")
+	if xff == "" {
+		return ""
+	}
+
+	ips := strings.Split(xff, ",")
+	for i := len(ips) - 1; i >= 0; i-- {
+		ip := strings.TrimSpace(ips[i])
+		if ip == "" {
+			continue
+		}
+		if isTrustedProxy(ip, trustedProxies) {
+			continue
+		}
+		return ip
+	}
+	return ""
 }
 
 // tokenPrefix はセッショントークンの先頭一部だけをログ用に安全に取り出します。

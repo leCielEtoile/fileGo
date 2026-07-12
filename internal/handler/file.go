@@ -224,7 +224,7 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Content-Disposition", contentDispositionAttachment(filename))
 
 	rangeHeader := r.Header.Get("Range")
 	if rangeHeader != "" {
@@ -331,6 +331,39 @@ func (h *FileHandler) ListDirectories(w http.ResponseWriter, r *http.Request) {
 		"success":     true,
 		"directories": directories,
 	})
+}
+
+// contentDispositionAttachment は RFC 6266 準拠の Content-Disposition 値を組み立てます。
+// ダウンロードファイル名に含まれるクオート・制御文字でヘッダを撹乱されないよう、
+// ASCIIフォールバックを無害化しつつ、元の名前は filename*（UTF-8）で正確に伝えます。
+func contentDispositionAttachment(filename string) string {
+	ascii := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == '"' || r == '\\' || r > 0x7e {
+			return '_'
+		}
+		return r
+	}, filename)
+	return fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s", ascii, rfc5987Escape(filename))
+}
+
+// rfc5987Escape は RFC 5987 の attr-char 以外のバイトをパーセントエンコードします。
+func rfc5987Escape(s string) string {
+	const upperhex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9',
+			c == '!', c == '#', c == '$', c == '&', c == '+', c == '-',
+			c == '.', c == '^', c == '_', c == '`', c == '|', c == '~':
+			b.WriteByte(c)
+		default:
+			b.WriteByte('%')
+			b.WriteByte(upperhex[c>>4])
+			b.WriteByte(upperhex[c&0x0f])
+		}
+	}
+	return b.String()
 }
 
 // parseRange Range ヘッダーをパースする

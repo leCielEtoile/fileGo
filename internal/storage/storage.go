@@ -64,6 +64,7 @@ func (m *Manager) InitializeDirectories() error {
 // これは、ユーザーが個人ディレクトリに初めてアップロードする際にオンデマンドで呼び出されます。
 // directoryName はユーザーのディレクトリ名（例: "username"）である必要があります。
 func (m *Manager) EnsureUserDirectory(directoryName string) error {
+	directoryName = models.SanitizeDirName(directoryName)
 	userDir := filepath.Join(m.config.Storage.UploadPath, "user", directoryName)
 	if err := os.MkdirAll(userDir, 0750); err != nil {
 		return fmt.Errorf("ユーザーディレクトリの作成に失敗しました: %w", err)
@@ -74,6 +75,7 @@ func (m *Manager) EnsureUserDirectory(directoryName string) error {
 // UserDirectoryExists はユーザー専用ディレクトリが既に存在するかを返します。
 // 未アップロードのユーザー（ディレクトリ未作成）を判別するために使用します。
 func (m *Manager) UserDirectoryExists(directoryName string) bool {
+	directoryName = models.SanitizeDirName(directoryName)
 	userDir := filepath.Join(m.config.Storage.UploadPath, "user", directoryName)
 	info, err := os.Stat(userDir)
 	return err == nil && info.IsDir()

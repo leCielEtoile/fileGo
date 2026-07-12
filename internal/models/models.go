@@ -1,7 +1,25 @@
 // Package models はアプリケーション全体で共有するドメインモデルを定義します。
 package models
 
-import "time"
+import (
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// SanitizeDirName はユーザー名を "user/" 直下に収まる安全な単一ディレクトリ名へ
+// 正規化します。パス区切り・".."・先頭末尾のドット・NUL を無害化し、
+// 万一プロバイダーが細工した username を返しても親ディレクトリへ抜け出せないようにします。
+// 正常なユーザー名（区切り文字を含まない単一要素）は変化しません。
+func SanitizeDirName(name string) string {
+	name = filepath.Base(strings.TrimSpace(name))
+	name = strings.NewReplacer("/", "_", "\\", "_", "..", "_", "\x00", "").Replace(name)
+	name = strings.Trim(name, ".")
+	if name == "" {
+		return "_"
+	}
+	return name
+}
 
 // User は認証済みユーザーを表します。
 // 認証プロバイダーを1つに限定しているため、ID にはプロバイダー内のsubjectをそのまま用います。
@@ -16,9 +34,10 @@ type User struct {
 	Email     string    `json:"email"`
 }
 
-// GetDirectoryName はユーザーのディレクトリ名（ユーザー名）を返します。
+// GetDirectoryName はユーザーのディレクトリ名を返します。
+// ファイルシステム上のパス構成要素として使うため、常にサニタイズします。
 func (u *User) GetDirectoryName() string {
-	return u.Username
+	return SanitizeDirName(u.Username)
 }
 
 // Session はログイン中のユーザーのセッションを表します。
