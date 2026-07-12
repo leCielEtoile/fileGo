@@ -113,11 +113,12 @@ Cookie: session_token=...
   "avatar": "a_1234567890abcdef1234567890abcdef",
   "email": "user@example.com",
   "created_at": "2024-01-01T00:00:00Z",
-  "last_login": "2024-01-02T00:00:00Z"
+  "last_login": "2024-01-02T00:00:00Z",
+  "is_admin": false
 }
 ```
 
-`id` はプロバイダー内の `subject`（DiscordならユーザーID）です。
+`id` はプロバイダー内の `subject`（DiscordならユーザーID）です。`is_admin` は `admin_role_id` を保有するかの判定結果で、フロントが管理ページへの導線を出し分けるために使います（`/admin` 自体は `AdminMiddleware` でサーバー側保護されます）。
 
 **エラー:**
 - `401 Unauthorized`: セッションが無効または期限切れ
@@ -487,7 +488,13 @@ Cookie: session_token=...
 
 ### GET /api/events
 
-Server-Sent Events。アップロード・ダウンロード・削除・ログインのイベントを `text/event-stream` で配信します（認証必須）。
+Server-Sent Events。`text/event-stream` で配信します（認証必須）。イベント種別:
+
+| event | 説明 |
+|-------|------|
+| `file_upload` / `file_download` / `file_delete` | ファイル操作。**そのディレクトリへの読み取り権限を持つ接続にのみ**配信される（接続時に解決した権限スナップショットで絞り込み） |
+| `user_login` | ログイン通知（全接続へ配信） |
+| `permissions_updated` | ロールのリアルタイム変更で当該ユーザーの権限が変化したことを通知（該当ユーザーの接続のみ）。フロントはこれを受けてディレクトリ一覧を再取得する |
 
 ### GET /admin
 

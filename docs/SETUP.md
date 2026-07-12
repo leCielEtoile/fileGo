@@ -56,6 +56,7 @@
    - ⚠️ トークンは一度しか表示されません。紛失した場合は"Reset Token"で再生成
 4. **Privileged Gateway Intents** で以下を有効化:
    - ✅ **SERVER MEMBERS INTENT**
+   - これによりロールのリアルタイム同期（ゲートウェイ常時接続）が使えます。ロール変更が即座に認可へ反映され、ロール参照でDiscord REST APIを叩かなくなります。未有効の場合は起動時に自動検出してREST方式へフォールバックします（`config.yaml` の `auth.provider.gateway_enabled` で無効化も可能）。詳細は [ARCHITECTURE.md](ARCHITECTURE.md) を参照。
 5. **OAuth2** > **URL Generator** で以下を選択:
    - **Scopes**: `bot`
    - **Bot Permissions**: `Read Messages/View Channels`

@@ -161,6 +161,8 @@ HOST_PORT=8080
 SERVER_PORT=8080
 SERVER_BEHIND_PROXY=true
 SERVER_TRUSTED_PROXIES=172.16.0.0/12,10.0.0.0/8
+LOG_LEVEL=info                         # debug / info / warn / error（既定 info）
+TZ=Asia/Tokyo                          # ログのタイムゾーン
 
 # ストレージ設定
 STORAGE_MAX_FILE_SIZE=104857600        # 100MB
