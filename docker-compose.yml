@@ -15,8 +15,16 @@ services:
       - ./config:/app/config
       - ./data:/app/data
     environment:
-      - TZ=Asia/Tokyo
+      - TZ=${TZ:-Asia/Tokyo}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
     restart: unless-stopped
+    # アプリはstdoutへJSONログを出す。ホスト側で無制限に肥大化しないよう
+    # Dockerのjson-fileドライバでローテーションする。
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - fileserver_network
 

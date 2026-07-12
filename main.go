@@ -21,12 +21,14 @@ import (
 	"fileserver/internal/config"
 	"fileserver/internal/database"
 	"fileserver/internal/handler"
+	"fileserver/internal/logging"
 	"fileserver/internal/middleware"
 	"fileserver/internal/permission"
 	"fileserver/internal/rolestore"
 	"fileserver/internal/storage"
 
 	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
 )
 
 // ビルド時に -ldflags "-X main.Version=..." 等で注入されるビルド情報。
@@ -98,12 +100,18 @@ func main() {
 		os.Exit(runHealthcheck())
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+	// レベルは LOG_LEVEL（debug/info/warn/error）で切り替える。既定は info。
+	// request_id を全行へ付与するため ContextHandler で JSON ハンドラをラップする。
+	logLevel := logging.ParseLevel(os.Getenv("LOG_LEVEL"))
+	baseHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
+	logger := slog.New(logging.NewContextHandler(baseHandler)).With(
+		"service", "fileserver",
+		"version", Version,
+		"git_commit", GitCommit,
+	)
 	slog.SetDefault(logger)
 
-	slog.Info("fileserver を起動します", "version", Version, "build_date", BuildDate, "git_commit", GitCommit)
+	slog.Info("fileserver を起動します", "build_date", BuildDate, "log_level", logLevel.String())
 
 	// CONFIG_PATH未設定時は実行ファイルと同じディレクトリのconfig.yamlを既定にする。
 	configPath := config.ResolvePath()
@@ -166,9 +174,12 @@ func main() {
 
 	r := chi.NewRouter()
 
+	// RequestID を最初に置き、以降のログ・レスポンスヘッダ(X-Request-Id)へ相関IDを通す。
+	// RealIPでIPを補正してからLoggerで記録し、Recovererは最内でハンドラのpanicを捕捉する。
+	r.Use(chimw.RequestID)
+	r.Use(middleware.RealIP(cfg.Server.BehindProxy, cfg.Server.TrustedProxies))
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.RealIP(cfg.Server.BehindProxy, cfg.Server.TrustedProxies))
 
 	// 静的ファイル（バイナリ埋め込みのFSから配信）
 	staticFS, err := fs.Sub(webFS, "web/static")

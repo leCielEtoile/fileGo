@@ -46,6 +46,9 @@ func Initialize(dbPath string, maxConns int) (*sql.DB, error) {
 
 func createTables(db *sql.DB) error {
 	schema := `
+	-- access_logs は未使用のため廃止。既存DBからも確実に取り除く。
+	DROP TABLE IF EXISTS access_logs;
+
 	CREATE TABLE IF NOT EXISTS users (
 		id TEXT PRIMARY KEY,
 		provider TEXT NOT NULL,
@@ -69,24 +72,6 @@ func createTables(db *sql.DB) error {
 
 	CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 	CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-
-	CREATE TABLE IF NOT EXISTS access_logs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		user_id TEXT,
-		action TEXT NOT NULL,
-		filename TEXT,
-		filepath TEXT,
-		filesize INTEGER,
-		ip_address TEXT,
-		user_agent TEXT,
-		status_code INTEGER,
-		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-	);
-
-	CREATE INDEX IF NOT EXISTS idx_access_logs_user_id ON access_logs(user_id);
-	CREATE INDEX IF NOT EXISTS idx_access_logs_timestamp ON access_logs(timestamp);
-	CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action);
 
 	CREATE TABLE IF NOT EXISTS file_metadata (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,

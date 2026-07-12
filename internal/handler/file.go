@@ -67,7 +67,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	hasPermission, err := h.permissionChecker.CheckPermission(user.ID, directory, "write")
 	if err != nil {
-		slog.Error("権限チェックエラー", "error", err)
+		slog.ErrorContext(r.Context(), "権限チェックエラー", "error", err)
 		http.Error(w, "権限の確認に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -79,7 +79,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// user配下は初回アップロード時に個別ディレクトリを作る（事前作成しない方針）。
 	if strings.HasPrefix(directory, "user/") {
 		if ensureErr := h.storageManager.EnsureUserDirectory(user.GetDirectoryName()); ensureErr != nil {
-			slog.Error("ユーザーディレクトリ作成エラー", "error", ensureErr)
+			slog.ErrorContext(r.Context(), "ユーザーディレクトリ作成エラー", "error", ensureErr)
 			http.Error(w, "ユーザーディレクトリの作成に失敗しました", http.StatusInternalServerError)
 			return
 		}
@@ -92,7 +92,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			slog.Error("ファイルのクローズに失敗しました", "error", closeErr)
+			slog.ErrorContext(r.Context(), "ファイルのクローズに失敗しました", "error", closeErr)
 		}
 	}()
 
@@ -103,17 +103,17 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	savedFile, err := h.storageManager.SaveFile(file, header.Filename, directory)
 	if err != nil {
-		slog.Error("ファイル保存エラー", "error", err)
+		slog.ErrorContext(r.Context(), "ファイル保存エラー", "error", err)
 		http.Error(w, "ファイルの保存に失敗しました", http.StatusInternalServerError)
 		return
 	}
 
 	// メタデータ保存の失敗はアップロード自体を失敗させない（本体は保存済み）。
 	if err := h.storageManager.SaveFileMetadata(directory, savedFile.Filename, user.ID, user.Username); err != nil {
-		slog.Warn("メタデータの保存に失敗しました", "error", err)
+		slog.WarnContext(r.Context(), "メタデータの保存に失敗しました", "error", err)
 	}
 
-	slog.Info("ファイルアップロード成功", "user_id", user.ID, "filename", header.Filename, "directory", directory, "size", header.Size)
+	slog.InfoContext(r.Context(), "ファイルアップロード成功", "user_id", user.ID, "filename", header.Filename, "directory", directory, "size", header.Size)
 
 	if h.sseHandler != nil {
 		h.sseHandler.BroadcastFileUpload(user, directory, savedFile.Filename, savedFile.Size)
@@ -148,7 +148,7 @@ func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 
 	hasPermission, err := h.permissionChecker.CheckPermission(user.ID, directory, "read")
 	if err != nil {
-		slog.Error("権限チェックエラー", "error", err)
+		slog.ErrorContext(r.Context(), "権限チェックエラー", "error", err)
 		http.Error(w, "権限の確認に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -159,7 +159,7 @@ func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 
 	files, err := h.storageManager.ListFiles(directory)
 	if err != nil {
-		slog.Error("ファイル一覧取得エラー", "error", err)
+		slog.ErrorContext(r.Context(), "ファイル一覧取得エラー", "error", err)
 		http.Error(w, "ファイル一覧の取得に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -186,7 +186,7 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 
 	hasPermission, err := h.permissionChecker.CheckPermission(user.ID, directory, "read")
 	if err != nil {
-		slog.Error("権限チェックエラー", "error", err)
+		slog.ErrorContext(r.Context(), "権限チェックエラー", "error", err)
 		http.Error(w, "権限の確認に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -204,7 +204,7 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "ファイルが見つかりません", http.StatusNotFound)
 			return
 		}
-		slog.Error("ファイル情報取得エラー", "error", err)
+		slog.ErrorContext(r.Context(), "ファイル情報取得エラー", "error", err)
 		http.Error(w, "ファイル情報の取得に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -212,13 +212,13 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	// #nosec G304,G703 - filePath は decodePathParams で検証済みの入力から構築される
 	file, err := os.Open(filePath)
 	if err != nil {
-		slog.Error("ファイルオープンエラー", "error", err)
+		slog.ErrorContext(r.Context(), "ファイルオープンエラー", "error", err)
 		http.Error(w, "ファイルのオープンに失敗しました", http.StatusInternalServerError)
 		return
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			slog.Error("ファイルのクローズに失敗しました", "error", err)
+			slog.ErrorContext(r.Context(), "ファイルのクローズに失敗しました", "error", err)
 		}
 	}()
 
@@ -241,20 +241,20 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusPartialContent)
 
 		if _, err := file.Seek(start, 0); err != nil {
-			slog.Error("ファイルシークに失敗しました", "error", err)
+			slog.ErrorContext(r.Context(), "ファイルシークに失敗しました", "error", err)
 			return
 		}
 		if _, err := io.CopyN(w, file, end-start+1); err != nil {
-			slog.Error("ファイル転送に失敗しました", "error", err)
+			slog.ErrorContext(r.Context(), "ファイル転送に失敗しました", "error", err)
 		}
 	} else {
 		w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
 		if _, err := io.Copy(w, file); err != nil {
-			slog.Error("ファイル転送に失敗しました", "error", err)
+			slog.ErrorContext(r.Context(), "ファイル転送に失敗しました", "error", err)
 		}
 	}
 
-	slog.Info("ファイルダウンロード", "user_id", user.ID, "filename", filename, "directory", directory)
+	slog.InfoContext(r.Context(), "ファイルダウンロード", "user_id", user.ID, "filename", filename, "directory", directory)
 
 	if h.sseHandler != nil {
 		h.sseHandler.BroadcastFileDownload(user, directory, filename)
@@ -276,7 +276,7 @@ func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	hasPermission, err := h.permissionChecker.CheckPermission(user.ID, directory, "delete")
 	if err != nil {
-		slog.Error("権限チェックエラー", "error", err)
+		slog.ErrorContext(r.Context(), "権限チェックエラー", "error", err)
 		http.Error(w, "権限の確認に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -286,12 +286,12 @@ func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.storageManager.DeleteFile(directory, filename); err != nil {
-		slog.Error("ファイル削除エラー", "error", err)
+		slog.ErrorContext(r.Context(), "ファイル削除エラー", "error", err)
 		http.Error(w, "ファイルの削除に失敗しました", http.StatusInternalServerError)
 		return
 	}
 
-	slog.Info("ファイル削除成功", "user_id", user.ID, "filename", filename, "directory", directory)
+	slog.InfoContext(r.Context(), "ファイル削除成功", "user_id", user.ID, "filename", filename, "directory", directory)
 
 	// SSEでブロードキャスト
 	if h.sseHandler != nil {
@@ -314,7 +314,7 @@ func (h *FileHandler) ListDirectories(w http.ResponseWriter, r *http.Request) {
 
 	accessibleDirs, err := h.permissionChecker.GetAccessibleDirectories(user.ID)
 	if err != nil {
-		slog.Error("アクセス可能ディレクトリ取得エラー", "error", err)
+		slog.ErrorContext(r.Context(), "アクセス可能ディレクトリ取得エラー", "error", err)
 		http.Error(w, "ディレクトリ一覧の取得に失敗しました", http.StatusInternalServerError)
 		return
 	}

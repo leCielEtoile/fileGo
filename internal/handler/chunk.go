@@ -83,7 +83,7 @@ func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
 
 	hasPermission, err := h.permissionChecker.CheckPermission(user.ID, req.Directory, "write")
 	if err != nil {
-		slog.Error("権限チェックエラー", "error", err)
+		slog.ErrorContext(r.Context(), "権限チェックエラー", "error", err)
 		http.Error(w, "権限の確認に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -95,7 +95,7 @@ func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
 	// user配下は初回アップロード時に個別ディレクトリを作る（事前作成しない方針）。
 	if strings.HasPrefix(req.Directory, "user/") {
 		if ensureErr := h.storageManager.EnsureUserDirectory(user.GetDirectoryName()); ensureErr != nil {
-			slog.Error("ユーザーディレクトリ作成エラー", "error", ensureErr)
+			slog.ErrorContext(r.Context(), "ユーザーディレクトリ作成エラー", "error", ensureErr)
 			http.Error(w, "ユーザーディレクトリの作成に失敗しました", http.StatusInternalServerError)
 			return
 		}
@@ -112,13 +112,13 @@ func (h *ChunkHandler) InitChunkUpload(w http.ResponseWriter, r *http.Request) {
 		totalChunks,
 	)
 	if err != nil {
-		slog.Error("アップロード初期化エラー", "error", err)
+		slog.ErrorContext(r.Context(), "アップロード初期化エラー", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	uploadID := session.UploadID
 
-	slog.Info("チャンクアップロード初期化", "upload_id", uploadID, "user_id", user.ID, "filename", req.Filename, "directory", req.Directory)
+	slog.InfoContext(r.Context(), "チャンクアップロード初期化", "upload_id", uploadID, "user_id", user.ID, "filename", req.Filename, "directory", req.Directory)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":      true,
@@ -165,12 +165,12 @@ func (h *ChunkHandler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.uploadManager.SaveChunk(uploadID, user.ID, chunkIndex, chunkData); err != nil {
-		slog.Error("チャンク保存エラー", "upload_id", uploadID, "chunk_index", chunkIndex, "error", err)
+		slog.ErrorContext(r.Context(), "チャンク保存エラー", "upload_id", uploadID, "chunk_index", chunkIndex, "error", err)
 		writeChunkError(w, err)
 		return
 	}
 
-	slog.Debug("チャンク保存成功", "upload_id", uploadID, "chunk_index", chunkIndex, "size", len(chunkData))
+	slog.DebugContext(r.Context(), "チャンク保存成功", "upload_id", uploadID, "chunk_index", chunkIndex, "size", len(chunkData))
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":     true,
@@ -223,7 +223,7 @@ func (h *ChunkHandler) CompleteChunkUpload(w http.ResponseWriter, r *http.Reques
 
 	savedFile, err := h.uploadManager.CompleteUpload(uploadID, user.ID)
 	if err != nil {
-		slog.Error("アップロード完了エラー", "upload_id", uploadID, "error", err)
+		slog.ErrorContext(r.Context(), "アップロード完了エラー", "upload_id", uploadID, "error", err)
 		writeChunkError(w, err)
 		return
 	}
@@ -232,10 +232,10 @@ func (h *ChunkHandler) CompleteChunkUpload(w http.ResponseWriter, r *http.Reques
 
 	// メタデータ保存の失敗は完了を失敗させない（本体は保存済み）。
 	if err := h.storageManager.SaveFileMetadata(directory, savedFile.Filename, user.ID, user.Username); err != nil {
-		slog.Warn("メタデータの保存に失敗しました", "error", err)
+		slog.WarnContext(r.Context(), "メタデータの保存に失敗しました", "error", err)
 	}
 
-	slog.Info("チャンクアップロード完了", "upload_id", uploadID, "final_path", savedFile.Path)
+	slog.InfoContext(r.Context(), "チャンクアップロード完了", "upload_id", uploadID, "final_path", savedFile.Path)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":  true,
@@ -256,12 +256,12 @@ func (h *ChunkHandler) CancelChunkUpload(w http.ResponseWriter, r *http.Request)
 	uploadID := chi.URLParam(r, "upload_id")
 
 	if err := h.uploadManager.CancelUpload(uploadID, user.ID); err != nil {
-		slog.Error("アップロードキャンセルエラー", "upload_id", uploadID, "error", err)
+		slog.ErrorContext(r.Context(), "アップロードキャンセルエラー", "upload_id", uploadID, "error", err)
 		writeChunkError(w, err)
 		return
 	}
 
-	slog.Info("チャンクアップロードキャンセル", "upload_id", uploadID)
+	slog.InfoContext(r.Context(), "チャンクアップロードキャンセル", "upload_id", uploadID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,

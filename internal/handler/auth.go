@@ -88,14 +88,14 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	token, err := p.Exchange(r.Context(), code)
 	if err != nil {
-		slog.Error("トークン交換エラー", "error", err, "provider", providerName)
+		slog.ErrorContext(r.Context(), "トークン交換エラー", "error", err, "provider", providerName)
 		http.Error(w, "認証に失敗しました", http.StatusInternalServerError)
 		return
 	}
 
 	userInfo, err := p.FetchUserInfo(r.Context(), token)
 	if err != nil {
-		slog.Error("ユーザー情報取得エラー", "error", err, "provider", providerName)
+		slog.ErrorContext(r.Context(), "ユーザー情報取得エラー", "error", err, "provider", providerName)
 		http.Error(w, "ユーザー情報の取得に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -103,7 +103,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// メンバーシップ確認（Discordのギルドメンバー確認、OIDCはallowlist判定等）
 	isMember, err := p.IsMember(r.Context(), token, userInfo)
 	if err != nil {
-		slog.Error("メンバーシップ確認エラー", "error", err, "provider", providerName)
+		slog.ErrorContext(r.Context(), "メンバーシップ確認エラー", "error", err, "provider", providerName)
 		http.Error(w, "メンバーシップの確認に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -116,7 +116,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	userID := userInfo.Subject
 
 	if upsertErr := h.upsertUser(userID, userInfo); upsertErr != nil {
-		slog.Error("ユーザー登録エラー", "error", upsertErr)
+		slog.ErrorContext(r.Context(), "ユーザー登録エラー", "error", upsertErr)
 		http.Error(w, "ユーザー登録に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -126,10 +126,10 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// 初回アップロード時に作成する（それまで自分のディレクトリは閲覧できない）。
 	if h.storageManager != nil && p.PrecreateUserDirectory() {
 		if ensureErr := h.storageManager.EnsureUserDirectory(userInfo.Username); ensureErr != nil {
-			slog.Error("ユーザーディレクトリ作成エラー", "error", ensureErr, "username", userInfo.Username)
+			slog.ErrorContext(r.Context(), "ユーザーディレクトリ作成エラー", "error", ensureErr, "username", userInfo.Username)
 			// エラーが発生してもログインは継続（次回アップロード時に再試行される）
 		} else {
-			slog.Info("ユーザーディレクトリを作成しました", "username", userInfo.Username)
+			slog.InfoContext(r.Context(), "ユーザーディレクトリを作成しました", "username", userInfo.Username)
 		}
 	}
 
@@ -144,7 +144,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		VALUES (?, ?, ?, ?)
 	`, sessionToken, userID, userInfo.Provider, expiresAt)
 	if err != nil {
-		slog.Error("セッション作成エラー", "error", err)
+		slog.ErrorContext(r.Context(), "セッション作成エラー", "error", err)
 		http.Error(w, "セッション作成に失敗しました", http.StatusInternalServerError)
 		return
 	}
@@ -160,7 +160,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode, // Strictだと外部IdPからのリダイレクトでCookieが送出されない
 	})
 
-	slog.Info("ユーザーがログインしました", "user_id", userID, "username", userInfo.Username, "provider", providerName)
+	slog.InfoContext(r.Context(), "ユーザーがログインしました", "user_id", userID, "username", userInfo.Username, "provider", providerName)
 
 	if h.sseHandler != nil {
 		user := &models.User{
@@ -181,7 +181,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		ctx := context.Background()
 		if _, err := h.db.ExecContext(ctx, "DELETE FROM sessions WHERE session_token = ?", cookie.Value); err != nil {
-			slog.Error("セッション削除に失敗しました", "error", err)
+			slog.ErrorContext(r.Context(), "セッション削除に失敗しました", "error", err)
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -16,31 +17,56 @@ import (
 	"fileserver/internal/models"
 )
 
-// Logger はロギングミドルウェアです。
+// Logger はアクセスログを出力するミドルウェアです。
+// ステータスに応じてレベルを出し分け（5xx=Error / 4xx=Warn / それ以外=Info）、
+// ヘルスチェックと静的アセットは平常時ノイズになるため Debug に落とします。
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
 		next.ServeHTTP(wrapped, r)
 
-		duration := time.Since(start)
+		level := statusLevel(wrapped.statusCode)
+		// /health や /static は正常時は情報価値が低いためDebugへ（異常時は本来のレベルを維持）。
+		if isNoisePath(r.URL.Path) && level < slog.LevelWarn {
+			level = slog.LevelDebug
+		}
 
-		slog.Info("HTTP request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", wrapped.statusCode,
-			"duration_ms", duration.Milliseconds(),
-			"ip", r.RemoteAddr,
+		slog.LogAttrs(r.Context(), level, "HTTP request",
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+			slog.Int("status", wrapped.statusCode),
+			slog.Int64("duration_ms", time.Since(start).Milliseconds()),
+			slog.Int("bytes", wrapped.written),
+			slog.String("ip", r.RemoteAddr),
+			slog.String("user_agent", r.UserAgent()),
 		)
 	})
 }
 
-// responseWriter はステータスコード追跡のためのカスタムレスポンスライターです。
+// statusLevel はHTTPステータスから対応するログレベルを決めます。
+func statusLevel(status int) slog.Level {
+	switch {
+	case status >= 500:
+		return slog.LevelError
+	case status >= 400:
+		return slog.LevelWarn
+	default:
+		return slog.LevelInfo
+	}
+}
+
+// isNoisePath はアクセスログを常時Infoで残す価値が低いパスかを返します。
+func isNoisePath(path string) bool {
+	return path == "/health" || strings.HasPrefix(path, "/static/")
+}
+
+// responseWriter はステータスコードと応答バイト数を追跡するレスポンスライターです。
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode int
+	written    int
 }
 
 func (rw *responseWriter) WriteHeader(code int) {
@@ -48,12 +74,28 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// Recoverer はパニック回復ミドルウェアです。
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	n, err := rw.ResponseWriter.Write(b)
+	rw.written += n
+	return n, err
+}
+
+// Flush はSSE等のストリーミング応答のため http.Flusher を透過させます。
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Recoverer はパニックを回復し、原因調査のためスタックトレース付きで記録します。
 func Recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				slog.Error("panic occurred", "error", err)
+				slog.LogAttrs(r.Context(), slog.LevelError, "panic recovered",
+					slog.Any("error", err),
+					slog.String("stack", string(debug.Stack())),
+				)
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			}
 		}()
@@ -124,12 +166,12 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB, provider authprovider.Provid
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("session_token")
 			if err != nil {
-				slog.Debug("認証Cookie未検出", "path", r.URL.Path, "error", err)
+				slog.DebugContext(r.Context(), "認証Cookie未検出", "path", r.URL.Path, "error", err)
 				http.Error(w, "authentication required", http.StatusUnauthorized)
 				return
 			}
 
-			slog.Debug("認証Cookie検出", "path", r.URL.Path, "token_prefix", tokenPrefix(cookie.Value))
+			slog.DebugContext(r.Context(), "認証Cookie検出", "path", r.URL.Path, "token_prefix", tokenPrefix(cookie.Value))
 
 			var session models.Session
 			err = db.QueryRowContext(r.Context(), `
@@ -140,16 +182,16 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB, provider authprovider.Provid
 
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
-					slog.Debug("無効または期限切れセッション", "token_prefix", tokenPrefix(cookie.Value))
+					slog.DebugContext(r.Context(), "無効または期限切れセッション", "token_prefix", tokenPrefix(cookie.Value))
 					http.Error(w, "invalid session", http.StatusUnauthorized)
 					return
 				}
-				slog.Error("session validation error", "error", err)
+				slog.ErrorContext(r.Context(), "session validation error", "error", err)
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
 
-			slog.Debug("セッション検証成功", "user_id", session.UserID)
+			slog.DebugContext(r.Context(), "セッション検証成功", "user_id", session.UserID)
 
 			var user models.User
 			err = db.QueryRowContext(r.Context(), `
@@ -168,27 +210,27 @@ func AuthMiddleware(cfg *config.Config, db *sql.DB, provider authprovider.Provid
 
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
-					slog.Warn("ユーザー情報が見つかりません", "user_id", session.UserID)
+					slog.WarnContext(r.Context(), "ユーザー情報が見つかりません", "user_id", session.UserID)
 					http.Error(w, "user not found", http.StatusUnauthorized)
 					return
 				}
-				slog.Error("user info retrieval error", "error", err)
+				slog.ErrorContext(r.Context(), "user info retrieval error", "error", err)
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
 
-			slog.Debug("ユーザー情報取得成功", "username", user.Username)
+			slog.DebugContext(r.Context(), "ユーザー情報取得成功", "username", user.Username)
 
 			// 在籍の継続確認（Discordはギルド在籍。5分キャッシュでレート制限を回避）。
 			// エラー時は一時的障害の可能性があるため弾かず500とする。
 			isMember, memberErr := provider.VerifyMembership(r.Context(), user.Subject)
 			if memberErr != nil {
-				slog.Error("在籍確認エラー", "error", memberErr, "user_id", user.ID)
+				slog.ErrorContext(r.Context(), "在籍確認エラー", "error", memberErr, "user_id", user.ID)
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
 			if !isMember {
-				slog.Warn("在籍が確認できないためアクセスを拒否しました", "user_id", user.ID, "username", user.Username)
+				slog.WarnContext(r.Context(), "在籍が確認できないためアクセスを拒否しました", "user_id", user.ID, "username", user.Username)
 				// 認証Cookieを失効させ、再ログインを促す（属性はログイン時と揃える）
 				// #nosec G124 - Secureは設定(SecureCookie)由来。HttpOnly/SameSiteも設定済み
 				http.SetCookie(w, &http.Cookie{
@@ -216,7 +258,7 @@ func AdminMiddleware(cfg *config.Config, provider authprovider.Provider) func(ht
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := r.Context().Value(models.UserContextKey).(*models.User)
 			if !ok {
-				slog.Warn("管理者チェック: ユーザー情報が見つかりません")
+				slog.WarnContext(r.Context(), "管理者チェック: ユーザー情報が見つかりません")
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}
@@ -224,18 +266,18 @@ func AdminMiddleware(cfg *config.Config, provider authprovider.Provider) func(ht
 			// ロールはキャッシュではなくプロバイダーから都度取得し、降格を即時反映する。
 			roles, err := provider.GetUserRoles(r.Context(), user.Subject)
 			if err != nil {
-				slog.Error("管理者チェック: ロール情報取得エラー", "error", err, "user_id", user.ID)
+				slog.ErrorContext(r.Context(), "管理者チェック: ロール情報取得エラー", "error", err, "user_id", user.ID)
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
 
 			if !cfg.HasAdminRole(roles) {
-				slog.Warn("管理者権限がありません", "user_id", user.ID, "username", user.Username)
+				slog.WarnContext(r.Context(), "管理者権限がありません", "user_id", user.ID, "username", user.Username)
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}
 
-			slog.Debug("管理者権限確認成功", "user_id", user.ID)
+			slog.DebugContext(r.Context(), "管理者権限確認成功", "user_id", user.ID)
 			next.ServeHTTP(w, r)
 		})
 	}

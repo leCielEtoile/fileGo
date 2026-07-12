@@ -34,7 +34,7 @@ func (h *AdminHandler) AdminPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.pageTmpl.Execute(w, data); err != nil {
-		slog.Error("テンプレートのレンダリングに失敗しました", "error", err)
+		slog.ErrorContext(r.Context(), "テンプレートのレンダリングに失敗しました", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
