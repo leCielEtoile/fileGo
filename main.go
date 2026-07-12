@@ -300,11 +300,13 @@ func main() {
 
 	addr := ":" + cfg.Server.Port
 	srv := &http.Server{
-		Addr:         addr,
-		Handler:      r,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:    addr,
+		Handler: r,
+		// ReadTimeout/WriteTimeoutはボディ読み取り・レスポンス書き込みの全体に期限を課すため設定しない。
+		// 大容量のアップロード/ダウンロードと、無期限に流し続けるSSE(/api/events)が打ち切られてしまう。
+		// スローロリス対策はヘッダ読み取りのみを縛るReadHeaderTimeoutが担う。
+		ReadHeaderTimeout: 30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	go func() {

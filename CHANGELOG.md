@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-13
+
+リバースプロキシ配下での SSE 切断とアップロード失敗を修正するホットフィックス。
+
+### Fixed（修正）
+- `http.Server` の `ReadTimeout` / `WriteTimeout`（各30秒）がボディ読み取りとレスポンス書き込みの全体に期限を課していたため、SSE（`/api/events`）が接続から30秒で強制切断されていた問題。応答ヘッダ送出後の打ち切りとなるためリバースプロキシが `RST_STREAM` を返し、ブラウザ側では `ERR_HTTP2_PROTOCOL_ERROR` として観測される。
+- 同じタイムアウトにより、30秒以内に送り切れないアップロード（チャンク20MB／通常100MB）が中断されていた問題。
+- HTTP/2 では送出が禁止されているホップバイホップヘッダ `Connection: keep-alive` を SSE ハンドラが付与していた問題。
+
+### Changed（変更）
+- スローロリス対策を、ヘッダ読み取りのみに期限を課す `ReadHeaderTimeout`（30秒）へ移行。
+
 ## [0.1.0] - 2026-07-12
 
 最初のベータリリース。
@@ -42,5 +54,6 @@
 
 ---
 
-[Unreleased]: https://github.com/leCielEtoile/fileGo/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/leCielEtoile/fileGo/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/leCielEtoile/fileGo/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/leCielEtoile/fileGo/releases/tag/v0.1.0
