@@ -52,3 +52,14 @@ type Provider interface {
 	// 誰でもログインできるOIDCはfalse（初回アップロードまで自分のディレクトリを持たない）。
 	PrecreateUserDirectory() bool
 }
+
+// MembershipSyncer は、ロールのリアルタイム同期（Discordゲートウェイ）を任意で
+// 提供するプロバイダーが実装します。対応しないプロバイダー（OIDC等）は実装しません。
+type MembershipSyncer interface {
+	// StartMembershipSync はリアルタイム同期を開始します。started=false は
+	// フォールバック運用（従来のREST/都度取得）のままであることを表します。
+	// onChange は対象ユーザーのロール変化時に呼ばれます。
+	StartMembershipSync(ctx context.Context, onChange func(userID string)) (started bool, err error)
+	// StopMembershipSync は同期を停止します。
+	StopMembershipSync() error
+}

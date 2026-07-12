@@ -44,6 +44,13 @@ auth:
     # 対象のDiscordサーバー（ギルド）のID
     guild_id: "YOUR_GUILD_ID"
 
+    # ロールのリアルタイム同期（ゲートウェイ常時接続）。未指定は有効。
+    # 有効にすると起動時に全メンバーを一括ロードし、以後はロール変更を即時反映する
+    # （ロール参照でREST APIを叩かなくなり、レート制限とも無縁になる）。
+    # 要 Server Members Intent（Discord Developer Portal で有効化）。
+    # 未許可の環境では起動時に自動検出し、従来のREST方式へフォールバックする。
+    # gateway_enabled: true
+
     # OAuth2認証後のリダイレクトURL
     # Discord Developer Portalの「OAuth2 > Redirects」に登録する必要があります
     redirect_url: "https://yourdomain.com/auth/callback"

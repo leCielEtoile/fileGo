@@ -176,6 +176,28 @@ func main() {
 	permissionChecker := permission.NewChecker(cfg, authProvider, storageManager, db)
 	sseHandler := handler.NewSSEHandler(permissionChecker)
 
+	// ロールのリアルタイム同期（Discordゲートウェイ）を試みる（対応プロバイダーのみ）。
+	// 起動をブロックしないよう非同期で開始し、準備完了までの間はREST方式で動作する。
+	// 特権インテント未許可などで同期できない環境では自動的にREST方式のまま継続する。
+	if syncer, ok := authProvider.(authprovider.MembershipSyncer); ok {
+		go func() {
+			started, syncErr := syncer.StartMembershipSync(context.Background(), sseHandler.RefreshUserFilter)
+			switch {
+			case syncErr != nil:
+				slog.Warn("ロールのリアルタイム同期を開始できませんでした。REST方式で継続します", "error", syncErr)
+			case started:
+				slog.Info("Discordゲートウェイによるロールのリアルタイム同期を開始しました")
+			default:
+				slog.Info("ロールのリアルタイム同期は無効です（REST方式で動作します）")
+			}
+		}()
+		defer func() {
+			if err := syncer.StopMembershipSync(); err != nil {
+				slog.Error("ゲートウェイ停止に失敗しました", "error", err)
+			}
+		}()
+	}
+
 	// テンプレートはリクエスト毎の再パースを避けるため起動時に一度だけパースする。
 	indexTmpl := loadTemplate("web/templates/index.html")
 	indexMobileTmpl := loadTemplate("web/templates/index_mobile.html")

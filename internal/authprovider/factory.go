@@ -16,12 +16,13 @@ func New(ctx context.Context, c config.ProviderConfig, store RoleStore) (Provide
 	switch c.Type {
 	case "discord":
 		return NewDiscordProvider(DiscordConfig{
-			Name:         c.Name,
-			ClientID:     c.ClientID,
-			ClientSecret: c.ClientSecret,
-			RedirectURL:  c.RedirectURL,
-			GuildID:      c.GuildID,
-			BotToken:     c.BotToken,
+			Name:           c.Name,
+			ClientID:       c.ClientID,
+			ClientSecret:   c.ClientSecret,
+			RedirectURL:    c.RedirectURL,
+			GuildID:        c.GuildID,
+			BotToken:       c.BotToken,
+			GatewayEnabled: c.GatewayOn(),
 		}), nil
 	case "oidc":
 		return NewOIDCProvider(ctx, OIDCConfig{

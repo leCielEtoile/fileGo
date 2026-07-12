@@ -237,6 +237,30 @@ func (h *SSEHandler) canReceive(client *sseClient, event SSEEvent) bool {
 	return client.filter.Load().CanRead(event.Directory)
 }
 
+// RefreshUserFilter は指定ユーザーの全接続について権限スナップショットを取り直します。
+// ロールのリアルタイム変更（ゲートウェイのメンバー更新）を即座に認可へ反映するために
+// 呼ばれます。併せて、UI側が表示を更新できるよう当該ユーザーへ通知イベントを送ります。
+func (h *SSEHandler) RefreshUserFilter(userID string) {
+	h.mu.RLock()
+	targets := make([]*sseClient, 0)
+	for c := range h.clients {
+		if c.userID == userID {
+			targets = append(targets, c)
+		}
+	}
+	h.mu.RUnlock()
+
+	for _, c := range targets {
+		h.refreshFilter(c)
+		select {
+		case c.ch <- SSEEvent{Type: "permissions_updated", Data: map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		}}:
+		default:
+		}
+	}
+}
+
 // refreshFilter はクライアントの読み取り可能ディレクトリのスナップショットを取り直します。
 // 解決に失敗した場合は既存スナップショットを維持し、無ければ空（全拒否）を設定します。
 func (h *SSEHandler) refreshFilter(client *sseClient) {

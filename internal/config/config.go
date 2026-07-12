@@ -68,6 +68,11 @@ type ProviderConfig struct {
 	GuildID  string `yaml:"guild_id,omitempty"`
 	BotToken string `yaml:"bot_token,omitempty"`
 
+	// Discord専用: ゲートウェイ常時接続によるロールのリアルタイム同期の有効化。
+	// 未指定(nil)は有効扱い。Server Members Intent が未許可の環境では、
+	// 起動時に自動検出してREST方式へフォールバックする。
+	GatewayEnabled *bool `yaml:"gateway_enabled,omitempty"`
+
 	// 汎用OIDC専用
 	Issuer      string `yaml:"issuer,omitempty"`
 	GroupsClaim string `yaml:"groups_claim,omitempty"`
@@ -76,6 +81,11 @@ type ProviderConfig struct {
 	// いずれも未設定の場合は認証できた全ユーザーを許可します。
 	AllowedEmailDomains []string `yaml:"allowed_email_domains,omitempty"`
 	AllowedEmails       []string `yaml:"allowed_emails,omitempty"`
+}
+
+// GatewayOn はゲートウェイ同期を試みるべきかを返します（未指定は有効）。
+func (p *ProviderConfig) GatewayOn() bool {
+	return p.GatewayEnabled == nil || *p.GatewayEnabled
 }
 
 // DatabaseConfig はデータベース設定を表します。

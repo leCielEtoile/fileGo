@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -63,6 +64,8 @@ type DiscordConfig struct {
 	RedirectURL  string
 	GuildID      string
 	BotToken     string
+	// GatewayEnabled はゲートウェイ常時接続によるロールのリアルタイム同期を試みるかどうか。
+	GatewayEnabled bool
 }
 
 // DiscordProvider はDiscordをこのアプリケーションで唯一のOAuth2実装として提供する
@@ -74,6 +77,12 @@ type DiscordProvider struct {
 	name        string
 	guildID     string
 	botToken    string
+
+	// gatewayEnabled はゲートウェイ同期を試みる設定。gateway は同期成功時に非同期で
+	// セットされ、準備完了後は GetUserRoles/VerifyMembership がRESTではなくメモリ参照で
+	// 解決される。バックグラウンド起動と参照が別ゴルーチンのため atomic で共有する。
+	gatewayEnabled bool
+	gateway        atomic.Pointer[gatewaySync]
 
 	cacheMutex sync.RWMutex
 	cache      map[string]*roleCacheEntry
@@ -105,13 +114,45 @@ func NewDiscordProvider(cfg DiscordConfig) *DiscordProvider {
 				TokenURL: "https://discord.com/api/oauth2/token",
 			},
 		},
-		guildID:    cfg.GuildID,
-		botToken:   cfg.BotToken,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-		cache:      make(map[string]*roleCacheEntry),
-		cacheTTL:   5 * time.Minute,
-		limiter:    rate.NewLimiter(rate.Limit(discordRequestsPerSecond), discordRequestsPerSecond),
+		guildID:        cfg.GuildID,
+		botToken:       cfg.BotToken,
+		gatewayEnabled: cfg.GatewayEnabled,
+		httpClient:     &http.Client{Timeout: 10 * time.Second},
+		cache:          make(map[string]*roleCacheEntry),
+		cacheTTL:       5 * time.Minute,
+		limiter:        rate.NewLimiter(rate.Limit(discordRequestsPerSecond), discordRequestsPerSecond),
 	}
+}
+
+// StartMembershipSync はゲートウェイ同期を開始します。
+// started=true はリアルタイム同期が有効化されたこと、false は（無効設定・資格情報不足・
+// インテント未許可などで）RESTフォールバックのままであることを表します。
+// onChange はメンバーのロール変化時に該当userIDで呼ばれます（SSEの権限再解決などに使用）。
+func (p *DiscordProvider) StartMembershipSync(ctx context.Context, onChange func(string)) (bool, error) {
+	if !p.gatewayEnabled || p.botToken == "" || p.guildID == "" {
+		return false, nil
+	}
+
+	gs, err := newGatewaySync(p.botToken, p.guildID, onChange)
+	if err != nil {
+		return false, err
+	}
+
+	// Ready（全メンバー同期完了）まで最大30秒待つ。到達しなければ自動でRESTへ戻す。
+	if err := gs.Start(ctx, 30*time.Second); err != nil {
+		return false, err
+	}
+
+	p.gateway.Store(gs)
+	return true, nil
+}
+
+// StopMembershipSync はゲートウェイ接続を閉じます（未起動なら何もしません）。
+func (p *DiscordProvider) StopMembershipSync() error {
+	if gs := p.gateway.Load(); gs != nil {
+		return gs.Close()
+	}
+	return nil
 }
 
 // ttlWithJitter はキャッシュ有効期限に 0〜TTL/5 のランダムな上乗せをして返します。
@@ -204,8 +245,19 @@ func (p *DiscordProvider) PrecreateUserDirectory() bool {
 	return true
 }
 
-// GetUserRoles はBotトークンを使いギルドメンバーのロールID一覧を取得します(5分キャッシュ)。
+// GetUserRoles はギルドメンバーのロールID一覧を返します。
+// ゲートウェイ同期が準備完了ならメモリから即時に、そうでなければBotトークンで
+// REST取得します(5分キャッシュ)。
 func (p *DiscordProvider) GetUserRoles(ctx context.Context, subject string) ([]string, error) {
+	if gs := p.gateway.Load(); gs != nil {
+		if roles, present, ok := gs.lookup(subject); ok {
+			if !present {
+				return nil, fmt.Errorf("ユーザーがギルドに存在しません (user_id: %s)", subject)
+			}
+			return roles, nil
+		}
+	}
+
 	roles, isMember, err := p.fetchMember(ctx, subject)
 	if err != nil {
 		return nil, err
@@ -216,9 +268,16 @@ func (p *DiscordProvider) GetUserRoles(ctx context.Context, subject string) ([]s
 	return roles, nil
 }
 
-// VerifyMembership はBotトークンでギルド在籍を確認します(5分キャッシュ)。
-// ログイン後の各リクエストで継続的に在籍を検証するために使用します。
+// VerifyMembership はギルド在籍を継続確認します。
+// ゲートウェイ同期が準備完了ならメモリから即時に、そうでなければBotトークンで
+// REST確認します(5分キャッシュ)。
 func (p *DiscordProvider) VerifyMembership(ctx context.Context, subject string) (bool, error) {
+	if gs := p.gateway.Load(); gs != nil {
+		if _, present, ok := gs.lookup(subject); ok {
+			return present, nil
+		}
+	}
+
 	_, isMember, err := p.fetchMember(ctx, subject)
 	if err != nil {
 		return false, err
