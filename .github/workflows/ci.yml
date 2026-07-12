@@ -259,7 +259,8 @@ jobs:
     needs: [docker]
     if: github.event_name != 'pull_request'
     permissions:
-      contents: read
+      # sbom-action はタグ/リリース時に SBOM を GitHub Release へ添付するため write が要る
+      contents: write
       packages: write
     steps:
       - name: 🔐 GitHub Container Registryにログイン
