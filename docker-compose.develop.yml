@@ -1,0 +1,17 @@
+# 開発用オーバーレイ。ローカルのソースからイメージをビルドして起動する。
+# 既定の docker-compose.yml は公開イメージ（GHCR）を使うため、
+# ローカルの変更を動かして確かめたいときにこのファイルを重ねる。
+#
+#   docker compose -f docker-compose.yml -f docker-compose.develop.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.develop.yml logs -f
+#
+# docker-compose.yml の設定（ユーザー・ボリューム・ヘルスチェック・read_only 等）は
+# そのまま継承し、イメージの取得元だけをローカルビルドへ差し替える。
+services:
+  fileserver:
+    # ローカルビルド専用のタグ。公開イメージ（ghcr.io/...）を上書きしないよう
+    # 別名にして、誤って開発ビルドをpushしたり取り違えたりするのを防ぐ。
+    image: filego:develop
+    build: .
+    # 上のイメージ名はレジストリに存在しないため、pullせず必ずビルドする。
+    pull_policy: build

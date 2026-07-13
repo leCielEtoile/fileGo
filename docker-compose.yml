@@ -1,23 +1,52 @@
+# 既定の構成。GitHub Container Registry に公開済みのイメージ（ビルド成果物）を使う。
+# clone / ダウンロード後、そのまま `docker compose up -d` で起動できる。
+#
+# ローカルのソースからビルドして動かしたい場合は開発用オーバーレイを重ねる:
+#   docker compose -f docker-compose.yml -f docker-compose.develop.yml up -d --build
 services:
   fileserver:
-    build: .
+    # 公開イメージ。タグ例: latest, v0.1.0, 0.1, 0
+    image: ghcr.io/lecieletoile/filego:${IMAGE_TAG:-latest}
     container_name: fileserver
+
     # 実行UID/GID。bindマウントへ書き込むファイルの所有者はこのUID/GIDになる。
     # PUID/PGIDを .env でホストユーザー（id -u / id -g）に合わせると、
     # 生成ファイルをホストユーザーがそのまま管理・削除できる。
     # 未指定時はイメージ既定の非rootユーザー(65532)で動作する（後方互換）。
     user: "${PUID:-65532}:${PGID:-65532}"
+
     ports:
-      - "8080:8080"
-    # ボリューム。ホスト側 ./config ./data は上記 user が書き込める必要がある。
+      - "${HOST_PORT:-8080}:8080"
+
+    # ボリューム。ホスト側ディレクトリは上記 user が書き込める必要がある。
     # 例: mkdir -p config data && sudo chown -R "$(id -u):$(id -g)" config data
     volumes:
-      - ./config:/app/config
-      - ./data:/app/data
+      # 設定ファイルとDB（初回起動時に config.yaml のひな型が自動生成される）
+      - ./config:/app/config:rw
+      # アップロードファイル保存先
+      - ./data:/app/data:rw
+
     environment:
       - TZ=${TZ:-Asia/Tokyo}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+
+    # server / database / storage の一部を環境変数で上書きする場合に使う。
+    # 認証情報（bot_token 等）は config.yaml のみで扱うためここには置かない。
+    # 未作成でも起動できるよう required: false とする。
+    env_file:
+      - path: .env
+        required: false
+
     restart: unless-stopped
+
+    # 最小イメージにはwget等が無いためバイナリ自身で疎通確認する。
+    healthcheck:
+      test: ["CMD", "/app/fileserver", "-healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
     # アプリはstdoutへJSONログを出す。ホスト側で無制限に肥大化しないよう
     # Dockerのjson-fileドライバでローテーションする。
     logging:
@@ -25,6 +54,24 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+        labels: "service=fileserver"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # 書き込みは bind マウント（config / data）と /tmp のみに限定する。
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
     networks:
       - fileserver_network
 

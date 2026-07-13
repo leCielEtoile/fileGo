@@ -200,24 +200,27 @@ cp .env.example .env
 vi .env
 
 # 起動（ディレクトリとconfig.yamlは自動生成）
-docker compose -f docker-compose.deploy.yml up -d
-
-# ログ確認
-docker compose -f docker-compose.deploy.yml logs -f
-```
-
-### 開発環境で起動
-
-```bash
-# 設定ファイルを準備
-cp config.yaml.example config.yaml
-vi config.yaml
-
-# 開発用docker-composeで起動
 docker compose up -d
 
 # ログ確認
 docker compose logs -f
+```
+
+### 開発環境で起動（ソースからビルド）
+
+既定の `docker-compose.yml` は公開イメージ（GHCR）を使います。ローカルの変更を動かして確かめたい場合は、開発用オーバーレイを重ねてビルドします。
+
+```bash
+# 設定ファイルを準備
+mkdir -p config
+cp config.yaml.example config/config.yaml
+vi config/config.yaml
+
+# ソースからビルドして起動
+docker compose -f docker-compose.yml -f docker-compose.develop.yml up -d --build
+
+# ログ確認
+docker compose -f docker-compose.yml -f docker-compose.develop.yml logs -f
 ```
 
 ### ローカルで直接ビルド・起動
@@ -258,10 +261,10 @@ OK
 **解決方法:**
 ```bash
 # ログを確認
-docker compose -f docker-compose.deploy.yml logs fileserver
+docker compose logs fileserver
 
 # config.yaml の認証設定を再確認（プレースホルダのままになっていないか）
-docker compose -f docker-compose.deploy.yml exec fileserver cat /app/config/config.yaml
+docker compose exec fileserver cat /app/config/config.yaml
 ```
 
 ### 権限エラー
@@ -276,10 +279,10 @@ docker compose -f docker-compose.deploy.yml exec fileserver cat /app/config/conf
 **デバッグ方法:**
 ```bash
 # アクセスログを確認（標準出力へJSON出力される）
-docker compose -f docker-compose.deploy.yml logs fileserver
+docker compose logs fileserver
 
 # ユーザーのロール情報を確認（起動ログに表示）
-docker compose -f docker-compose.deploy.yml logs | grep "roles"
+docker compose logs | grep "roles"
 ```
 
 ### アップロードエラー
@@ -315,14 +318,14 @@ STORAGE_MAX_FILE_SIZE=209715200  # 200MBに変更
 **解決方法:**
 ```bash
 # コンテナの状態確認
-docker compose -f docker-compose.deploy.yml ps
+docker compose ps
 
 # エラーログ確認
-docker compose -f docker-compose.deploy.yml logs
+docker compose logs
 
 # 完全にクリーンアップして再起動
-docker compose -f docker-compose.deploy.yml down -v
-docker compose -f docker-compose.deploy.yml up -d
+docker compose down -v
+docker compose up -d
 
 # ポート使用状況確認
 lsof -i :8080
@@ -341,7 +344,7 @@ lsof -i :8080
 **解決方法:**
 ```bash
 # 生成ログを確認
-docker compose -f docker-compose.deploy.yml logs | grep "設定ファイル"
+docker compose logs | grep "設定ファイル"
 
 # ホスト側ディレクトリの所有者を実行ユーザーに合わせる
 # 既定(65532)のまま使う場合:
@@ -350,7 +353,7 @@ sudo chown -R 65532:65532 ./config ./data
 #   sudo chown -R "$(id -u):$(id -g)" ./config ./data
 
 # 再起動
-docker compose -f docker-compose.deploy.yml restart
+docker compose restart
 ```
 
 > **補足**: `.env` に `PUID`/`PGID` を設定すると、コンテナはそのUID/GIDで動作し、

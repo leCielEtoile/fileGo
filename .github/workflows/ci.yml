@@ -325,8 +325,9 @@ jobs:
       - name: 🔧 Docker Buildxをセットアップ
         uses: docker/setup-buildx-action@v4.2.0
 
-      # compose定義は build: を持つためイメージは常にここでビルドされる。
-      # これによりDockerfile自体が起動可能かを毎回検証できる。
+      # 既定の docker-compose.yml は公開イメージを使うため、ここでは develop
+      # オーバーレイを重ねて「そのコミットのソース」からビルドする。これにより
+      # Dockerfile 自体が起動可能かを毎回検証できる（公開イメージの検証ではない）。
       - name: 📁 データディレクトリを作成
         run: |
           mkdir -p config data
@@ -334,21 +335,21 @@ jobs:
           sudo chown -R 65532:65532 config data
 
       - name: 🚀 サービスを起動
-        run: docker compose up -d --build
+        run: docker compose -f docker-compose.yml -f docker-compose.develop.yml up -d --build
 
       - name: ⏳ ヘルスチェックが通るまで待機
         run: timeout 60 sh -c 'until curl -fsS http://localhost:8080/health; do sleep 2; done'
 
       - name: ✅ コンテナステータスを確認
-        run: docker compose ps
+        run: docker compose -f docker-compose.yml -f docker-compose.develop.yml ps
 
       - name: 🔍 設定ファイルが自動生成されたことを確認
         run: test -f config/config.yaml
 
       - name: 📋 ログを表示
         if: always()
-        run: docker compose logs
+        run: docker compose -f docker-compose.yml -f docker-compose.develop.yml logs
 
       - name: 🛑 サービスを停止
         if: always()
-        run: docker compose down
+        run: docker compose -f docker-compose.yml -f docker-compose.develop.yml down

@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+### Changed（変更）
+- `docker-compose.yml` を**公開イメージ（GHCR）利用**に変更。clone / ダウンロード後そのまま `docker compose up -d` で起動でき、ソースからのビルドが不要になった。旧 `docker-compose.deploy.yml` の本番設定（healthcheck・`read_only`・`security_opt`・リソース制限・`env_file`）を統合。
+
+### Added（追加）
+- 開発用オーバーレイ `docker-compose.develop.yml` を新設。ローカルのソースからビルドして動かす場合に重ねて使う。
+  ```
+  docker compose -f docker-compose.yml -f docker-compose.develop.yml up -d --build
+  ```
+
+### Removed（削除）
+- `docker-compose.deploy.yml`（内容を `docker-compose.yml` へ統合したため）。
+
 ## [0.1.1] - 2026-07-13
 
 リバースプロキシ配下での SSE 切断とアップロード失敗を修正するホットフィックス。

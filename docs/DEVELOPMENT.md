@@ -78,7 +78,13 @@ EOF
 air
 ```
 
-Docker Compose での起動手順は [セットアップガイドの起動方法](SETUP.md#起動方法) を参照してください。
+Docker Compose で動かす場合、既定の `docker-compose.yml` は**GHCRの公開イメージ**を使います。ローカルのソースからビルドして確かめるには、開発用オーバーレイを重ねてください。
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.develop.yml up -d --build
+```
+
+詳細は [セットアップガイドの起動方法](SETUP.md#起動方法) を参照してください。
 
 ## プロジェクト構成
 
