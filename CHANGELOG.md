@@ -5,6 +5,29 @@
 
 ## [Unreleased]
 
+### ⚠️ 破壊的変更（環境変数）
+- **アプリの環境変数はすべて `FILEGO_` 接頭辞が必要になりました**（例: `SERVER_PORT` → `FILEGO_SERVER_PORT`、`LOG_LEVEL` → `FILEGO_LOG_LEVEL`、`CONFIG_PATH` → `FILEGO_CONFIG_PATH`）。`SERVER_PORT` や `DATABASE_PATH` のような一般的な名前は、Kubernetes・PaaS・CI などの共有環境で他コンポーネントと衝突するためです。接頭辞なしの旧名は読み込まれませんが、**残っていると起動時に警告**するため、黙って無視されることはありません。`TZ` は Go ランタイムが解釈する標準変数のため接頭辞なしのままです。
+
+### Security（セキュリティ）
+- **秘密情報をファイルから読めるようにしました**（`*_FILE` 規約）。`FILEGO_BOT_TOKEN_FILE` / `FILEGO_CLIENT_SECRET_FILE` に**ファイルのパス**を指定すると、その中身を秘密情報として読み込みます。Docker secrets や Kubernetes の Secret ボリューム（`/run/secrets/...`）を素直に使えます。環境変数に入るのは「パス」だけで、秘密の値そのものは入りません（値を環境変数に置くと `docker inspect`・プロセス一覧・ログ経由で漏れるため）。
+
+### Fixed（修正）
+- **手順どおりに実行するとDockerで起動できなかった問題を修正**（ドキュメント）。`config` / `data` ディレクトリを事前に作らずに `docker compose up` すると、**Dockerがそれらを root 所有で作成**するため、非rootで動くコンテナが書き込めず `permission denied` でクラッシュループしていた。手順に `mkdir -p config data` を追加し、`.env` も編集不要で生成する形（`printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env`）に変更した。Docker Compose は `id -u` を自動実行できない（`.env` はコマンド置換に非対応）ため、値の生成が必要。
+- **不正な環境変数を黙って無視していた問題を修正**。`FILEGO_DATABASE_MAX_CONNECTIONS=abc` のように解釈できない値を指定すると、従来は**その項目を無視して起動**していたため、運用者は「設定したつもり」で気付けなかった。現在は**どの変数が不正かを示して起動時にエラー**にする。
+- **真偽値の解釈が壊れていた問題を修正**。従来は `== "true"` の単純比較だったため、`FILEGO_SERVER_BEHIND_PROXY=1` や `TRUE` が**黙って false** になっていた（`STORAGE_CHUNK_UPLOAD_ENABLED=1` ならチャンクアップロードが無効化された）。`1` / `0` / `TRUE` / `True` なども正しく解釈する。
+- **`secure_cookie` に環境変数が無かった**問題を修正（`FILEGO_SERVER_SECURE_COOKIE`）。他のサーバー設定にはあるのにこれだけ欠けていた。
+- **設定項目を省略すると壊れる問題を修正**（既定値が適用されていなかった）。従来は省略した項目がゼロ値になり、次のような不具合が起きていた。
+  - `storage.cleanup_interval` 省略 → `time.NewTicker(0)` が**パニックしプロセスが落ちる**（ゴルーチン内のため回復不能）
+  - `storage.max_concurrent_uploads` 省略 → 判定が常に真になり**チャンクアップロードが常に拒否される**
+  - `storage.max_file_size` 省略 → **0バイト超の全ファイルが拒否される**
+  - `storage.chunk_upload_enabled` 省略 → **チャンクアップロードが黙って無効化される**
+  - `server.port` 省略 → ランダムポートで待ち受け
+- 起動時の設定検証を追加。必須項目（`auth.provider` の認証情報、`storage.directories`）が欠けている場合、**何が足りないかを示して即座に起動失敗**する（実行時の不可解なエラーを防ぐ）。
+
+### Changed（変更）
+- `config.yaml` は**変更したい項目だけ書けばよく**なった（省略時は既定値）。ひな型にもその旨を明記。
+- **設定の説明を [docs/CONFIGURATION.md](docs/CONFIGURATION.md) に集約**。従来は SETUP.md（設定方法・grants・required_roles）と DEPLOYMENT.md（環境変数・認証設定）に**二重に分散**しており、どちらを見ればよいか分かりにくかった。SETUP は「起動するまでの手順」、DEPLOYMENT は「運用」、CONFIGURATION は「設定リファレンス」と役割を分離した。
+
 ### Added（追加）
 - **ログインに特定ロールを要求できる `auth.provider.required_roles`**（任意）。従来はDiscordサーバーに在籍していれば誰でもログインでき、個人ディレクトリが払い出されたため、誰でも参加できる公開サーバーでは使いづらかった。在籍に加えてロール保有を要求できる（いずれか1つ保有でよい＝OR）。
   - 未設定なら従来動作（在籍のみでログイン可）。

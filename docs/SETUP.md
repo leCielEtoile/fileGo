@@ -6,7 +6,7 @@
 
 - [前提条件](#前提条件)
 - [Discord Application作成](#discord-application作成)
-- [設定方法](#設定方法)
+- [設定](#設定)
 - [起動方法](#起動方法)
 - [トラブルシューティング](#トラブルシューティング)
 
@@ -85,129 +85,48 @@ Staff Role ID: YOUR_STAFF_ROLE_ID_HERE
 Member Role ID: YOUR_MEMBER_ROLE_ID_HERE
 ```
 
-## 設定方法
+## 設定
 
-認証情報（`bot_token` / `client_secret` 等）は **`config.yaml` の `auth.provider` にのみ**記述します。環境変数では設定できません（環境変数で上書きできるのは `server` / `database` / `storage` の一部のみ）。
+認証情報は `config.yaml` の `auth.provider` に記述します。初回起動時にひな型が自動生成されるので、それを編集してください。
 
 ```bash
-# 設定ファイルを作成
-mkdir -p config
-cp config.yaml.example config/config.yaml
-
-# 設定ファイルを編集
+# Docker: 初回起動でひな型が生成される
+docker compose up -d
 vi config/config.yaml
+
+# 配布バイナリ: 実行ファイルと同じ場所に生成される
+./fileserver
+vi config.yaml
 ```
 
-> `config.yaml` は秘密情報を含むため `.gitignore` 済みです。コミットしないでください。スキーマの正は `config.yaml.example` です。
-
-**config.yamlの例（Discord）:**
+**起動に最低限必要なのは、認証情報とディレクトリ定義だけです**（他はすべて既定値）。
 
 ```yaml
-server:
-  port: "8080"
-  behind_proxy: true
-  secure_cookie: true
-  trusted_proxies:
-    - "172.16.0.0/12"
-    - "10.0.0.0/8"
-    - "192.168.0.0/16"
-
-# 認証プロバイダーは1つに限定（type: discord または oidc）
 auth:
   provider:
-    name: discord
     type: discord
-    bot_token: "YOUR_BOT_TOKEN_HERE"
-    client_id: "YOUR_CLIENT_ID_HERE"
-    client_secret: "YOUR_CLIENT_SECRET_HERE"
-    guild_id: "YOUR_GUILD_ID_HERE"
+    bot_token: "..."          # Discord Developer Portal で取得した値
+    client_id: "..."
+    client_secret: "..."
+    guild_id: "..."
     redirect_url: "https://yourdomain.com/auth/callback"
 
-database:
-  path: "/app/config/fileserver.db"
-  max_connections: 10
-
 storage:
-  upload_path: "/app/data/uploads"
-  max_file_size: 104857600
-  chunk_upload_enabled: true
-  chunk_size: 20971520
-  max_chunk_file_size: 536870912000
-  max_concurrent_uploads: 3
-  upload_session_ttl: 48h
-  cleanup_interval: 1h
-  admin_role_id: "1111111111111111111"  # 全ディレクトリ全操作を許可するロール
-
-  # ディレクトリごとの権限設定（grants）
   directories:
-    # 各ユーザーの個人ディレクトリ（本人と管理者のみ）
-    - path: "user"
-      type: user_private
-
-    # 管理者専用
-    - path: "admin"
-      grants:
-        - role: "1111111111111111111"
-          permissions: ["read", "write", "delete"]
-
-    # スタッフ用（editorは編集可、viewerは閲覧のみ）
-    - path: "staff"
-      grants:
-        - role: "2222222222222222222"   # editorロール
-          permissions: ["read", "write"]
-        - role: "3333333333333333333"   # viewerロール
-          permissions: ["read"]
-
-    # 公開ディレクトリ（全メンバーが閲覧可）
     - path: "public"
       grants:
-        - role: "*"
+        - role: "*"           # "*" は全メンバー
           permissions: ["read"]
 ```
 
-汎用OIDC（Keycloak等）を使う場合は `type: oidc` とし、`issuer` / `scopes` / `groups_claim` / `allowed_email_domains` 等を指定します。詳細は `config.yaml.example` のコメントを参照してください。
+> HTTPで動かす場合は `server.secure_cookie: false` にしてください（`true` のままだとログインできません）。
 
-**環境変数による上書き（任意）:**
+**設定項目の全リファレンス**（既定値・環境変数・権限モデル・秘密情報の扱い）は **[設定リファレンス](CONFIGURATION.md)** を参照してください。よく使うのは次の2つです。
 
-`server` / `database` / `storage` の一部は環境変数で上書きできます（優先順位: 環境変数 > config.yaml > デフォルト値）。`SERVER_PORT` / `SERVER_BEHIND_PROXY` / `DATABASE_PATH` / `STORAGE_MAX_FILE_SIZE` / `STORAGE_ADMIN_ROLE_ID` など。**認証系（`auth.provider`）は対象外**です。
+- [ログインできる人をロールで絞る（`required_roles`）](CONFIGURATION.md#ログインできる人を絞るrequired_roles) — 公開サーバーで「承認した人だけ」に限定する
+- [ディレクトリ権限（`grants`）](CONFIGURATION.md#storagedirectories権限モデル) — ロール／個人ごとに read / write / delete を付与する
 
-### ログインできる人を絞る（required_roles）
-
-既定では、**Discordサーバーに在籍していれば誰でもログインでき**、個人ディレクトリが払い出されます。誰でも参加できる公開サーバーでは、これは望ましくない場合があります。
-
-`auth.provider.required_roles` を設定すると、**在籍に加えて特定ロールの保有を要求**できます（いずれか1つ保有していればログイン可＝OR判定）。
-
-```yaml
-auth:
-  provider:
-    # ...
-    required_roles:
-      - "234567890123456789"   # approved ロール
-      - "123456789012345678"   # 管理者ロール
-```
-
-- **未設定なら従来どおり**、在籍しているだけでログインできます。
-- 条件を満たさないユーザーはログインできず、**個人ディレクトリも作成されません**。
-- **ロールを剥奪すると、既存セッションも次のリクエストで失効します**（ログイン時だけでなく、リクエストごとの在籍確認でも判定するため）。
-
-> ⚠️ **締め出しに注意**：管理者もこの条件の対象です。管理者ロールしか持たない人をログインさせる場合は、そのロールIDも `required_roles` に含めてください。
-
-汎用OIDCでも同様に指定でき、`groups_claim` の値と照合されます。`allowed_email_domains` / `allowed_emails` と併用した場合、設定されている条件は**すべて満たす必要があります**（AND）。ただしOIDCには在籍の継続確認が無いため、**ロール剥奪が既存セッションへ即時反映されるのはDiscordのみ**です。
-
-### ディレクトリ権限の設定（grants）
-
-`storage.directories[].grants` で各ディレクトリの権限を設定します。1つの `grant` は次を持ちます。
-
-- `role`: DiscordのロールID。`"*"` は全メンバーを表す
-- `user`: 特定メンバーのユーザーID（個人への付与）
-- `permissions`: 許可する操作の配列
-
-**permissions:**
-- `read`: ファイル一覧表示・ダウンロード
-- `write`: ファイルアップロード
-- `delete`: ファイル削除
-
-`admin_role_id` を持つユーザーは全ディレクトリで全操作が許可されます。`type: user_private` のディレクトリ（例 `user`）は本人と管理者のみアクセスできます。
+> `config.yaml` は秘密情報を含むため `.gitignore` 済みです。コミットしないでください。
 
 ## 起動方法
 
@@ -218,16 +137,22 @@ auth:
 git clone https://github.com/leCielEtoile/fileGo.git
 cd fileGo
 
-# 環境変数を設定
-cp .env.example .env
-vi .env
+# データ用ディレクトリを作り、実行UID/GIDを記録する（編集不要）
+mkdir -p config data
+printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env
 
-# 起動（ディレクトリとconfig.yamlは自動生成）
+# 起動（config.yaml は自動生成される）
 docker compose up -d
 
 # ログ確認
 docker compose logs -f
 ```
+
+> ⚠️ **`mkdir -p config data` を省略しないでください。** ディレクトリが存在しないと **Docker が root 所有で作成**します。コンテナは非rootで動くため書き込めず、`permission denied` で起動に失敗します。
+>
+> `PUID` / `PGID` は**コンテナの実行UID/GID**です。ホストの自分自身に合わせることで、生成されるファイル（アップロードされたファイル・DB）の所有者があなたになり、`sudo` なしで管理・削除できます。未設定の場合はイメージ既定の `65532` で動作しますが、その場合はホスト側ディレクトリも `65532` 所有にしておく必要があります。
+>
+> なお Docker Compose は `id -u` を自動実行できないため（`.env` はコマンド置換に非対応）、この値は上記のように**生成しておく必要があります**。
 
 ### 開発環境で起動（ソースからビルド）
 

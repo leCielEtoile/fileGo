@@ -71,9 +71,9 @@ USER 65532:65532
 # 既定値は「バイナリ直接実行でそのまま動く」相対パスにしてあるため、コンテナでは
 # ここで絶対パスを与えて上書きする（環境変数は config.yaml より優先される）。
 # 別の場所に置きたい場合は compose 等でこの環境変数を上書きする。
-ENV CONFIG_PATH=/app/config/config.yaml \
-    DATABASE_PATH=/app/config/fileserver.db \
-    STORAGE_UPLOAD_PATH=/app/data/uploads \
+ENV FILEGO_CONFIG_PATH=/app/config/config.yaml \
+    FILEGO_DATABASE_PATH=/app/config/fileserver.db \
+    FILEGO_STORAGE_UPLOAD_PATH=/app/data/uploads \
     TZ=Asia/Tokyo
 
 EXPOSE 8080

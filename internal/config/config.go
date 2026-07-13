@@ -5,21 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
+	"sort"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
-// configPathEnvVar は設定ファイルパスを明示的に指定するための環境変数名です。
-const configPathEnvVar = "CONFIG_PATH"
-
 // ResolvePath は読み込む設定ファイルのパスを決定します。
-// CONFIG_PATH環境変数が設定されている場合はそれを優先し、
+// FILEGO_CONFIG_PATH が設定されている場合はそれを優先し、
 // 未設定の場合は実行ファイルと同じディレクトリの "config.yaml" を既定値とします。
 func ResolvePath() string {
-	if envPath := os.Getenv(configPathEnvVar); envPath != "" {
+	if envPath := os.Getenv(EnvPrefix + "CONFIG_PATH"); envPath != "" {
 		return envPath
 	}
 
@@ -33,6 +30,8 @@ func ResolvePath() string {
 
 // Config はアプリケーション設定を表します。
 type Config struct {
+	// LogLevel はログレベル（debug / info / warn / error）。既定は info。
+	LogLevel string         `yaml:"log_level"`
 	Auth     AuthConfig     `yaml:"auth"`
 	Database DatabaseConfig `yaml:"database"`
 	Server   ServerConfig   `yaml:"server"`
@@ -110,7 +109,14 @@ type StorageConfig struct {
 	UploadSessionTTL     time.Duration     `yaml:"upload_session_ttl"`
 	CleanupInterval      time.Duration     `yaml:"cleanup_interval"`
 	MaxConcurrentUploads int               `yaml:"max_concurrent_uploads"`
-	ChunkUploadEnabled   bool              `yaml:"chunk_upload_enabled"`
+	// ChunkUploadEnabled は未指定(nil)を「有効」として扱うためポインタにしています。
+	// boolのままだと省略時にゼロ値(false)となり、チャンクアップロードが黙って無効化される。
+	ChunkUploadEnabled *bool `yaml:"chunk_upload_enabled"`
+}
+
+// ChunkUploadOn はチャンクアップロードを有効にすべきかを返します（未指定は有効）。
+func (s *StorageConfig) ChunkUploadOn() bool {
+	return s.ChunkUploadEnabled == nil || *s.ChunkUploadEnabled
 }
 
 // DirectoryConfig はディレクトリ設定を表します。
@@ -162,81 +168,139 @@ func Load(path string, defaultTemplate []byte) (*Config, error) {
 		return nil, fmt.Errorf("設定ファイルのパースに失敗しました: %w", err)
 	}
 
-	// 環境変数で上書き
-	overrideFromEnv(&cfg)
+	// 省略された項目に既定値を入れる（環境変数より先。環境変数が最優先）。
+	applyDefaults(&cfg)
+
+	// 環境変数で上書き。値が不正なら黙って無視せずエラーにする。
+	if err := applyEnvOverrides(&cfg); err != nil {
+		return nil, err
+	}
+
+	// 誤った設定は起動時に検出する（実行時の不可解な失敗を避ける）。
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
 }
 
-// overrideFromEnv 環境変数で設定を上書きする
-func overrideFromEnv(cfg *Config) {
-	// Server設定
-	if port := os.Getenv("SERVER_PORT"); port != "" {
-		cfg.Server.Port = port
+// 省略時に適用する既定値。ゼロ値のまま使うと壊れる項目があるため必ず埋める。
+// 例: cleanup_interval が0だと time.NewTicker(0) がパニックする。
+// max_concurrent_uploads が0だと「同時数 >= 0」が常に真になり全アップロードが拒否される。
+const (
+	defaultLogLevel             = "info"
+	defaultPort                 = "8080"
+	defaultServiceName          = "Discord File Server"
+	defaultDatabasePath         = "./data/fileserver.db"
+	defaultMaxConnections       = 10
+	defaultUploadPath           = "./data/uploads"
+	defaultMaxFileSize          = 100 * 1024 * 1024        // 100MB
+	defaultChunkSize            = 20 * 1024 * 1024         // 20MB
+	defaultMaxChunkFileSize     = 500 * 1024 * 1024 * 1024 // 500GB
+	defaultMaxConcurrentUploads = 3
+	defaultUploadSessionTTL     = 48 * time.Hour
+	defaultCleanupInterval      = time.Hour
+)
+
+// applyDefaults は未設定（ゼロ値）の項目に既定値を入れます。
+// これにより config.yaml は「既定から変えたい項目だけ」書けばよくなります。
+func applyDefaults(cfg *Config) {
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = defaultLogLevel
 	}
-	if serviceName := os.Getenv("SERVER_SERVICE_NAME"); serviceName != "" {
-		cfg.Server.ServiceName = serviceName
+	if cfg.Server.Port == "" {
+		cfg.Server.Port = defaultPort
 	}
-	if behindProxy := os.Getenv("SERVER_BEHIND_PROXY"); behindProxy != "" {
-		cfg.Server.BehindProxy = behindProxy == "true"
-	}
-	if trustedProxies := os.Getenv("SERVER_TRUSTED_PROXIES"); trustedProxies != "" {
-		cfg.Server.TrustedProxies = strings.Split(trustedProxies, ",")
+	if cfg.Server.ServiceName == "" {
+		cfg.Server.ServiceName = defaultServiceName
 	}
 
-	// 認証プロバイダー（Discord含む）の設定は環境変数では上書きせず、
-	// config.yaml のみで管理する。
-
-	// Database設定
-	if dbPath := os.Getenv("DATABASE_PATH"); dbPath != "" {
-		cfg.Database.Path = dbPath
+	if cfg.Database.Path == "" {
+		cfg.Database.Path = defaultDatabasePath
 	}
-	if maxConn := os.Getenv("DATABASE_MAX_CONNECTIONS"); maxConn != "" {
-		if val, err := strconv.Atoi(maxConn); err == nil {
-			cfg.Database.MaxConnections = val
-		}
+	if cfg.Database.MaxConnections <= 0 {
+		cfg.Database.MaxConnections = defaultMaxConnections
 	}
 
-	// Storage設定
-	if uploadPath := os.Getenv("STORAGE_UPLOAD_PATH"); uploadPath != "" {
-		cfg.Storage.UploadPath = uploadPath
+	if cfg.Storage.UploadPath == "" {
+		cfg.Storage.UploadPath = defaultUploadPath
 	}
-	if maxFileSize := os.Getenv("STORAGE_MAX_FILE_SIZE"); maxFileSize != "" {
-		if val, err := strconv.ParseInt(maxFileSize, 10, 64); err == nil {
-			cfg.Storage.MaxFileSize = val
+	if cfg.Storage.MaxFileSize <= 0 {
+		cfg.Storage.MaxFileSize = defaultMaxFileSize
+	}
+	if cfg.Storage.ChunkSize <= 0 {
+		cfg.Storage.ChunkSize = defaultChunkSize
+	}
+	if cfg.Storage.MaxChunkFileSize <= 0 {
+		cfg.Storage.MaxChunkFileSize = defaultMaxChunkFileSize
+	}
+	if cfg.Storage.MaxConcurrentUploads <= 0 {
+		cfg.Storage.MaxConcurrentUploads = defaultMaxConcurrentUploads
+	}
+	if cfg.Storage.UploadSessionTTL <= 0 {
+		cfg.Storage.UploadSessionTTL = defaultUploadSessionTTL
+	}
+	if cfg.Storage.CleanupInterval <= 0 {
+		cfg.Storage.CleanupInterval = defaultCleanupInterval
+	}
+}
+
+// Validate は設定の不備を起動時に検出します。
+// 実行時に不可解なエラーとして現れるより、何をどう直せばよいかを起動時に示します。
+func (c *Config) Validate() error {
+	p := c.Auth.Provider
+
+	switch p.Type {
+	case "discord":
+		if err := requireAll(map[string]string{
+			"auth.provider.bot_token":     p.BotToken,
+			"auth.provider.client_id":     p.ClientID,
+			"auth.provider.client_secret": p.ClientSecret,
+			"auth.provider.guild_id":      p.GuildID,
+			"auth.provider.redirect_url":  p.RedirectURL,
+		}); err != nil {
+			return err
+		}
+	case "oidc":
+		if err := requireAll(map[string]string{
+			"auth.provider.issuer":        p.Issuer,
+			"auth.provider.client_id":     p.ClientID,
+			"auth.provider.client_secret": p.ClientSecret,
+			"auth.provider.redirect_url":  p.RedirectURL,
+		}); err != nil {
+			return err
+		}
+	case "":
+		return fmt.Errorf("auth.provider.type が未設定です（\"discord\" または \"oidc\" を指定してください）")
+	default:
+		return fmt.Errorf("auth.provider.type が不正です: %q（\"discord\" または \"oidc\" を指定してください）", p.Type)
+	}
+
+	if len(c.Storage.Directories) == 0 {
+		return fmt.Errorf("storage.directories が空です（最低1つのディレクトリを定義してください）")
+	}
+	for i, d := range c.Storage.Directories {
+		if d.Path == "" {
+			return fmt.Errorf("storage.directories[%d].path が未設定です", i)
 		}
 	}
-	if chunkSize := os.Getenv("STORAGE_CHUNK_SIZE"); chunkSize != "" {
-		if val, err := strconv.ParseInt(chunkSize, 10, 64); err == nil {
-			cfg.Storage.ChunkSize = val
+
+	return nil
+}
+
+// requireAll は空文字の項目があれば、どれが足りないかを示すエラーを返します。
+func requireAll(fields map[string]string) error {
+	missing := make([]string, 0, len(fields))
+	for name, v := range fields {
+		if strings.TrimSpace(v) == "" {
+			missing = append(missing, name)
 		}
 	}
-	if maxChunkFileSize := os.Getenv("STORAGE_MAX_CHUNK_FILE_SIZE"); maxChunkFileSize != "" {
-		if val, err := strconv.ParseInt(maxChunkFileSize, 10, 64); err == nil {
-			cfg.Storage.MaxChunkFileSize = val
-		}
+	if len(missing) == 0 {
+		return nil
 	}
-	if maxConcurrent := os.Getenv("STORAGE_MAX_CONCURRENT_UPLOADS"); maxConcurrent != "" {
-		if val, err := strconv.Atoi(maxConcurrent); err == nil {
-			cfg.Storage.MaxConcurrentUploads = val
-		}
-	}
-	if chunkEnabled := os.Getenv("STORAGE_CHUNK_UPLOAD_ENABLED"); chunkEnabled != "" {
-		cfg.Storage.ChunkUploadEnabled = chunkEnabled == "true"
-	}
-	if sessionTTL := os.Getenv("STORAGE_UPLOAD_SESSION_TTL"); sessionTTL != "" {
-		if val, err := time.ParseDuration(sessionTTL); err == nil {
-			cfg.Storage.UploadSessionTTL = val
-		}
-	}
-	if cleanupInterval := os.Getenv("STORAGE_CLEANUP_INTERVAL"); cleanupInterval != "" {
-		if val, err := time.ParseDuration(cleanupInterval); err == nil {
-			cfg.Storage.CleanupInterval = val
-		}
-	}
-	if adminRoleID := os.Getenv("STORAGE_ADMIN_ROLE_ID"); adminRoleID != "" {
-		cfg.Storage.AdminRoleID = adminRoleID
-	}
+	sort.Strings(missing)
+	return fmt.Errorf("必須の設定が未設定です: %s", strings.Join(missing, ", "))
 }
 
 // GetDirectoryConfig はディレクトリパスから設定を取得します。

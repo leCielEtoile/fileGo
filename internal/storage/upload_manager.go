@@ -287,7 +287,13 @@ func (um *UploadManager) CancelUpload(uploadID, userID string) error {
 
 // startCleanupRoutine は一定間隔で期限切れセッションを掃除するゴルーチンです。
 func (um *UploadManager) startCleanupRoutine() {
-	ticker := time.NewTicker(um.config.Storage.CleanupInterval)
+	// time.NewTicker は非正の間隔でパニックする。設定側で既定値を入れているが、
+	// ここが落ちるとゴルーチン内のため回復できずプロセスごと死ぬので二重に守る。
+	interval := um.config.Storage.CleanupInterval
+	if interval <= 0 {
+		interval = time.Hour
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for range ticker.C {

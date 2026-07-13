@@ -54,6 +54,17 @@ func isMobile(userAgent string) bool {
 	return false
 }
 
+// setupLogger は指定レベルでJSON構造化ロガーを既定に設定します。
+// request_id を全行へ付与するため ContextHandler で JSON ハンドラをラップします。
+func setupLogger(level slog.Level) {
+	baseHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+	slog.SetDefault(slog.New(logging.NewContextHandler(baseHandler)).With(
+		"service", "fileserver",
+		"version", Version,
+		"git_commit", GitCommit,
+	))
+}
+
 // loadTemplate は埋め込みFSからテンプレートをパースします。
 // 失敗した場合は起動を継続できないため、ログを出力してプロセスを終了します。
 func loadTemplate(name string) *template.Template {
@@ -69,7 +80,7 @@ func loadTemplate(name string) *template.Template {
 // コンテナのHEALTHCHECKから `fileserver -healthcheck` として呼び出す用途で、
 // シェルやwgetを持たない最小イメージ（distroless / DHI static）でも動作します。
 func runHealthcheck() int {
-	port := os.Getenv("SERVER_PORT")
+	port := os.Getenv(config.EnvPrefix + "SERVER_PORT")
 	if port == "" {
 		port = "8080"
 	}
@@ -100,27 +111,27 @@ func main() {
 		os.Exit(runHealthcheck())
 	}
 
-	// レベルは LOG_LEVEL（debug/info/warn/error）で切り替える。既定は info。
-	// request_id を全行へ付与するため ContextHandler で JSON ハンドラをラップする。
-	logLevel := logging.ParseLevel(os.Getenv("LOG_LEVEL"))
-	baseHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
-	logger := slog.New(logging.NewContextHandler(baseHandler)).With(
-		"service", "fileserver",
-		"version", Version,
-		"git_commit", GitCommit,
-	)
-	slog.SetDefault(logger)
+	// 設定を読む前にもログが要るため、まず環境変数だけでロガーを組む（ブートストラップ）。
+	// 設定読み込み後に、config.yaml の log_level を反映して組み直す。
+	setupLogger(logging.ParseLevel(os.Getenv(config.EnvPrefix + "LOG_LEVEL")))
 
-	slog.Info("fileserver を起動します", "build_date", BuildDate, "log_level", logLevel.String())
+	// 接頭辞なしの旧名が残っていると「設定したのに効かない」事故になるため警告する。
+	config.WarnLegacyEnv()
 
-	// CONFIG_PATH未設定時は実行ファイルと同じディレクトリのconfig.yamlを既定にする。
+	// FILEGO_CONFIG_PATH 未設定時は実行ファイルと同じディレクトリのconfig.yamlを既定にする。
 	configPath := config.ResolvePath()
 	slog.Info("設定ファイルを読み込みます", "path", configPath)
 	cfg, err := config.Load(configPath, defaultConfigYAML)
 	if err != nil {
-		slog.Error("設定ファイルの読み込みに失敗しました", "error", err)
+		slog.Error("設定の読み込みに失敗しました", "error", err)
 		os.Exit(1)
 	}
+
+	// 設定（config.yaml + 環境変数）で決まった最終的なレベルでロガーを組み直す。
+	logLevel := logging.ParseLevel(cfg.LogLevel)
+	setupLogger(logLevel)
+
+	slog.Info("fileserver を起動します", "build_date", BuildDate, "log_level", logLevel.String())
 
 	// 初回起動でひな型を生成した直後などは認証情報が未設定のため、編集を促す。
 	if strings.Contains(cfg.Auth.Provider.BotToken, "YOUR_") ||
@@ -279,7 +290,7 @@ func main() {
 		r.Delete("/files/{directory}/{filename}", fileHandler.DeleteFile)
 
 		// チャンクアップロード（設定で有効化されている場合のみ登録）
-		if cfg.Storage.ChunkUploadEnabled {
+		if cfg.Storage.ChunkUploadOn() {
 			r.Post("/files/chunk/init", chunkHandler.InitChunkUpload)
 			r.Post("/files/chunk/upload/{upload_id}", chunkHandler.UploadChunk)
 			r.Get("/files/chunk/status/{upload_id}", chunkHandler.GetChunkStatus)

@@ -5,7 +5,7 @@
 ## 目次
 
 - [本番環境デプロイ](#本番環境デプロイ)
-- [環境変数設定](#環境変数設定)
+- [設定](#設定)
 - [リバースプロキシ設定](#リバースプロキシ設定)
 - [運用タスク](#運用タスク)
 - [バックアップ](#バックアップ)
@@ -23,9 +23,10 @@ GitHub ActionsでビルドされたDockerイメージを使用します。
 git clone https://github.com/leCielEtoile/fileGo.git
 cd fileGo
 
-# 2. 環境変数を設定
-cp .env.example .env
-vi .env
+# 2. データ用ディレクトリを作り、実行UID/GIDを記録する（編集不要）
+#    先に作らないと Docker が root 所有で作成し、非rootコンテナが書き込めない
+mkdir -p config data
+printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env
 
 # 3. イメージをpullして起動
 docker compose pull
@@ -125,65 +126,21 @@ curl http://localhost:8080/health
 
 # 起動ログの確認
 docker compose logs fileserver | head -50
-
-# 環境変数の確認
-docker compose logs fileserver | grep "Environment variables"
 ```
 
-## 認証設定（config.yaml）
+## 設定
 
-**認証情報は環境変数では設定できません。** Discord/OIDCの認証設定は `config.yaml` の `auth.provider` に記述します（`redirect_url` もここで設定）。初回起動時にひな型が `/app/config/config.yaml` に自動生成されるので、編集して再起動してください。
+設定項目・既定値・環境変数・秘密情報の扱いは **[設定リファレンス](CONFIGURATION.md)** に集約しています。運用でよく参照するのは次の点です。
 
-```yaml
-auth:
-  provider:
-    name: discord
-    type: discord
-    bot_token: "your_actual_bot_token"
-    client_id: "your_client_id"
-    client_secret: "your_client_secret"
-    guild_id: "your_guild_id"
-    redirect_url: "https://yourdomain.com/auth/callback"
-```
+- **優先順位**: 環境変数 > `config.yaml` > 既定値
+- **環境変数は `FILEGO_` 接頭辞**が必要（[全一覧](CONFIGURATION.md#環境変数)）。接頭辞なしの旧名は読み込まれず、起動時に警告します
+- **値が不正なら起動時にエラー**（黙って既定値で動くことはありません）
+- **秘密情報の値は環境変数に入れません**。`config.yaml` に書くか、[Docker secrets 等でファイルとして渡します](CONFIGURATION.md#秘密情報の扱い)
+- **Dockerでは `database.path` / `storage.upload_path` は無効**です（イメージが環境変数で絶対パスを固定しているため）。[詳細](CONFIGURATION.md#dockerイメージが固定しているパス)
 
-環境別に `redirect_url` を変えます（開発: `http://localhost:8080/auth/callback`、本番: `https://files.yourdomain.com/auth/callback`）。
+認証情報は `config.yaml` の `auth.provider` に記述します。初回起動時にひな型が `/app/config/config.yaml` に自動生成されるので、編集して再起動してください。
 
-## 環境変数設定
-
-環境変数で上書きできるのは `server` / `database` / `storage` の一部のみです（認証系は対象外）。**環境変数は `config.yaml` より優先されます。**
-
-### イメージが固定しているパス
-
-設定ひな型の既定値は「配布バイナリをそのまま実行できる」相対パス（`./data/...`）です。Dockerイメージはコンテナのボリューム構成に合わせ、次の環境変数で絶対パスを与えています。
-
-| 環境変数 | イメージでの既定値 | ホスト側（compose のマウント） |
-|---|---|---|
-| `CONFIG_PATH` | `/app/config/config.yaml` | `./config/config.yaml` |
-| `DATABASE_PATH` | `/app/config/fileserver.db` | `./config/fileserver.db` |
-| `STORAGE_UPLOAD_PATH` | `/app/data/uploads` | `./data/uploads` |
-
-そのため、コンテナでは `config.yaml` の `database.path` / `storage.upload_path` を編集しても**反映されません**（環境変数が優先されるため）。保存先を変えたい場合は compose の `environment` でこれらの環境変数を上書きしてください。
-
-### 推奨環境変数
-
-```bash
-# Docker/サーバー設定
-IMAGE_TAG=v1.0.0
-HOST_PORT=8080
-SERVER_PORT=8080
-SERVER_BEHIND_PROXY=true
-SERVER_TRUSTED_PROXIES=172.16.0.0/12,10.0.0.0/8
-LOG_LEVEL=info                         # debug / info / warn / error（既定 info）
-TZ=Asia/Tokyo                          # ログのタイムゾーン
-
-# ストレージ設定
-STORAGE_MAX_FILE_SIZE=104857600        # 100MB
-STORAGE_MAX_CHUNK_FILE_SIZE=536870912000  # 500GB
-STORAGE_ADMIN_ROLE_ID=123456789012345678
-
-# データベース設定
-DATABASE_MAX_CONNECTIONS=10
-```
+> 設定を変更したら**コンテナの再起動が必要**です（設定は起動時にのみ読み込まれます）。
 
 ## リバースプロキシ設定
 

@@ -45,7 +45,8 @@ grants = `directories[].grants`: {`role`|`user`|`"*"`} × {read|write|delete}.
 `users` (id=subject, UNIQUE(provider,subject)) · `sessions` (session_token PK, expires_at; expired rows purged at start + hourly) · `file_metadata` (uploader, sha256, UNIQUE(directory,filename)) · `oidc_user_roles` (PK(provider,subject), OIDC-only; persisted because OIDC roles come only from the ID Token). `access_logs` removed (`DROP` on start; access logging is stdout JSON).
 
 ## Invariants / pitfalls
-- **Secrets in `config.yaml` ONLY.** Env overrides cover parts of `server`/`database`/`storage`. Do NOT reintroduce `DISCORD_*` env for `bot_token`/`client_secret`.
+- **Never put secret VALUES in env vars** (leak via `docker inspect`, process list, logs). Secrets come from `config.yaml`, or from a file whose *path* is given by `FILEGO_BOT_TOKEN_FILE` / `FILEGO_CLIENT_SECRET_FILE` (`*_FILE` convention, for Docker/K8s secrets). Do NOT add env vars that carry the secret value itself.
+- **All app env vars are `FILEGO_`-prefixed** (unprefixed names collide in shared environments and are NOT read; a startup WARN flags leftovers). Env > config.yaml > defaults. Invalid env values are a startup **error**, never silently ignored.
 - `config.yaml` is gitignored; never commit. Source of truth = `config.yaml.example`. Also gitignored: `.mcp.json`, `*.db`.
 - Cookies: `session_token` (not `session_id`); CSRF `oauth_state`.
 - Errors = plain text (`http.Error`); success = JSON via `handler/helpers.go` `writeJSON`.

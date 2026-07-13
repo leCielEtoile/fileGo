@@ -28,7 +28,12 @@ services:
 
     environment:
       - TZ=${TZ:-Asia/Tokyo}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - FILEGO_LOG_LEVEL=${FILEGO_LOG_LEVEL:-info}
+      # 秘密情報は環境変数に「値」を入れず、ファイルのパスだけを渡す（下の secrets を参照）。
+      # docker inspect やプロセス一覧から値が漏れるのを防ぐため。
+      # 使う場合は下の secrets のコメントを外し、config.yaml 側の記述を省略できる。
+      # - FILEGO_BOT_TOKEN_FILE=/run/secrets/bot_token
+      # - FILEGO_CLIENT_SECRET_FILE=/run/secrets/client_secret
 
     # server / database / storage の一部を環境変数で上書きする場合に使う。
     # 認証情報（bot_token 等）は config.yaml のみで扱うためここには置かない。
@@ -74,6 +79,18 @@ services:
 
     networks:
       - fileserver_network
+
+    # 秘密情報をファイルとして渡す場合は有効化する（環境変数に値を入れないため安全）。
+    # あわせて上の environment の FILEGO_*_FILE のコメントも外すこと。
+    # secrets:
+    #   - bot_token
+    #   - client_secret
+
+# secrets:
+#   bot_token:
+#     file: ./secrets/bot_token
+#   client_secret:
+#     file: ./secrets/client_secret
 
 networks:
   fileserver_network:
