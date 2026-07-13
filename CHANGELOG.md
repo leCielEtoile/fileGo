@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-13
+
+Discord Botトークンの濫用検知（強制リセット）を招く重大な不具合を修正。**Discord連携を使う場合は必ず更新してください。**
+
 ### Fixed（修正）
 - **Discord APIを叩き続けてBotトークンが濫用検知される問題を修正**（重大）。次の4点が原因だった。
   - discordgo の既定（`ShouldReconnectOnError`）は**致命的closeコードでも無限に再接続**するため、無効トークン(4004)や未許可インテント(4014)で成功し得ないIDENTIFYを撃ち続けていた。自動再接続を無効化し、致命的コードでは即中止・それ以外は上限付き指数バックオフで再接続する自前の監視に置き換えた。
@@ -73,6 +77,7 @@
 
 ---
 
-[Unreleased]: https://github.com/leCielEtoile/fileGo/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/leCielEtoile/fileGo/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/leCielEtoile/fileGo/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/leCielEtoile/fileGo/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/leCielEtoile/fileGo/releases/tag/v0.1.0
