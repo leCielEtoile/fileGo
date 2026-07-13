@@ -3,11 +3,14 @@ package authprovider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,6 +26,31 @@ const discordAPIBase = "https://discord.com/api/v10"
 // Discordのグローバル上限（およそ毎秒50）を十分下回る値にし、多人数の
 // キャッシュ更新が偶然重なっても 429 を踏まないようにします。
 const discordRequestsPerSecond = 25
+
+// クールダウン（サーキットブレーカー）の各期間。
+// Discordがエラーを返している間もリクエスト毎に呼び出し続けると、
+// 無効トークンやレート制限に対して延々と叩き続けることになり、
+// Discordの濫用検知（トークン強制リセット）を招く。失敗したら一定時間
+// 呼び出し自体を止め、その間は期限切れキャッシュで凌ぐ。
+const (
+	// 認証エラー(401/403)はトークンが無効。再試行しても直らないため長く止める。
+	discordAuthCooldown = 15 * time.Minute
+	// その他の失敗（ネットワーク・5xx等）は指数的に延ばす。
+	discordFailCooldownMin = 30 * time.Second
+	discordFailCooldownMax = 5 * time.Minute
+	// 429で Retry-After が読めなかった場合の既定待機。
+	discordDefaultRetryAfter = 5 * time.Second
+)
+
+// ErrDiscordUnavailable はクールダウン中でDiscordを呼び出さなかったことを表します。
+var ErrDiscordUnavailable = errors.New("discord APIの呼び出しを抑止中です")
+
+// isPlaceholderToken は初回生成の config.yaml に残るひな型値かを判定します。
+// ひな型のままDiscordへ接続すると、確実に失敗するIDENTIFY/APIコールを
+// 撃ち続けることになるため、そもそも呼び出さない。
+func isPlaceholderToken(token string) bool {
+	return token == "" || strings.Contains(token, "YOUR_")
+}
 
 // discordUser はDiscordの `/users/@me` レスポンスを表します。
 type discordUser struct {
@@ -78,6 +106,8 @@ type DiscordProvider struct {
 	name        string
 	guildID     string
 	botToken    string
+	// apiBase はDiscord REST APIのベースURL。テストでスタブへ差し替えるためにフィールド化する。
+	apiBase string
 
 	// gatewayEnabled はゲートウェイ同期を試みる設定。gateway は同期成功時に非同期で
 	// セットされ、準備完了後は GetUserRoles/VerifyMembership がRESTではなくメモリ参照で
@@ -93,6 +123,61 @@ type DiscordProvider struct {
 	limiter *rate.Limiter
 	// sf は同一ユーザーへの同時ライブ取得を1回のAPI呼び出しに集約します。
 	sf singleflight.Group
+
+	// cooldown はDiscordが失敗を返している間、呼び出し自体を止めるサーキットブレーカー。
+	// レートリミッターは「毎秒25回まで許可」するだけなので、失敗が続くと毎秒25回
+	// 叩き続けてしまう。抑止期間を設けて濫用にならないようにする。
+	cooldownMu    sync.Mutex
+	cooldownUntil time.Time
+	cooldownStep  time.Duration
+}
+
+// inCooldown はクールダウン中かを返します。
+func (p *DiscordProvider) inCooldown() (time.Time, bool) {
+	p.cooldownMu.Lock()
+	defer p.cooldownMu.Unlock()
+	if time.Now().Before(p.cooldownUntil) {
+		return p.cooldownUntil, true
+	}
+	return time.Time{}, false
+}
+
+// tripCooldown は指定期間だけDiscordへの呼び出しを抑止します。
+func (p *DiscordProvider) tripCooldown(d time.Duration) {
+	p.cooldownMu.Lock()
+	defer p.cooldownMu.Unlock()
+	until := time.Now().Add(d)
+	if until.After(p.cooldownUntil) {
+		p.cooldownUntil = until
+	}
+}
+
+// tripFailCooldown は一時的失敗に対し、指数的に伸びる抑止期間を設定します。
+func (p *DiscordProvider) tripFailCooldown() {
+	p.cooldownMu.Lock()
+	step := p.cooldownStep
+	if step <= 0 {
+		step = discordFailCooldownMin
+	} else {
+		step *= 2
+		if step > discordFailCooldownMax {
+			step = discordFailCooldownMax
+		}
+	}
+	p.cooldownStep = step
+	until := time.Now().Add(step)
+	if until.After(p.cooldownUntil) {
+		p.cooldownUntil = until
+	}
+	p.cooldownMu.Unlock()
+}
+
+// clearCooldown は成功時に抑止状態を解除します。
+func (p *DiscordProvider) clearCooldown() {
+	p.cooldownMu.Lock()
+	p.cooldownUntil = time.Time{}
+	p.cooldownStep = 0
+	p.cooldownMu.Unlock()
 }
 
 // NewDiscordProvider はDiscordProviderを作成します。
@@ -117,6 +202,7 @@ func NewDiscordProvider(cfg DiscordConfig) *DiscordProvider {
 		},
 		guildID:        cfg.GuildID,
 		botToken:       cfg.BotToken,
+		apiBase:        discordAPIBase,
 		gatewayEnabled: cfg.GatewayEnabled,
 		httpClient:     &http.Client{Timeout: 10 * time.Second},
 		cache:          make(map[string]*roleCacheEntry),
@@ -130,7 +216,8 @@ func NewDiscordProvider(cfg DiscordConfig) *DiscordProvider {
 // インテント未許可などで）RESTフォールバックのままであることを表します。
 // onChange はメンバーのロール変化時に該当userIDで呼ばれます（SSEの権限再解決などに使用）。
 func (p *DiscordProvider) StartMembershipSync(ctx context.Context, onChange func(string)) (bool, error) {
-	if !p.gatewayEnabled || p.botToken == "" || p.guildID == "" {
+	// ひな型トークンのままでは必ず認証失敗(4004)する。無駄なIDENTIFYを撃たない。
+	if !p.gatewayEnabled || isPlaceholderToken(p.botToken) || p.guildID == "" {
 		return false, nil
 	}
 
@@ -337,12 +424,22 @@ func (p *DiscordProvider) fetchMember(ctx context.Context, subject string) (role
 // fetchMemberLive はキャッシュを介さずDiscord APIからメンバー情報を取得し、結果をキャッシュします。
 // ギルドに存在しない場合は isMember=false を返し、エラーとはしません。
 func (p *DiscordProvider) fetchMemberLive(ctx context.Context, subject string) (roles []string, isMember bool, err error) {
+	// ひな型トークンのままなら確実に失敗する。ネットワークへ出さない。
+	if isPlaceholderToken(p.botToken) {
+		return nil, false, fmt.Errorf("%w: bot_token が未設定です", ErrDiscordUnavailable)
+	}
+
+	// 失敗が続いている間は呼び出さない（濫用防止のサーキットブレーカー）。
+	if until, ok := p.inCooldown(); ok {
+		return nil, false, fmt.Errorf("%w (%s まで)", ErrDiscordUnavailable, until.Format(time.RFC3339))
+	}
+
 	// グローバルレート上限を超えないよう、送信前にトークンの発行を待つ。
 	if err := p.limiter.Wait(ctx); err != nil {
 		return nil, false, fmt.Errorf("レート制限待機の中断: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/guilds/%s/members/%s", discordAPIBase, p.guildID, subject)
+	url := fmt.Sprintf("%s/guilds/%s/members/%s", p.apiBase, p.guildID, subject)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, false, fmt.Errorf("リクエスト作成エラー: %w", err)
@@ -352,6 +449,7 @@ func (p *DiscordProvider) fetchMemberLive(ctx context.Context, subject string) (
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
+		p.tripFailCooldown()
 		return nil, false, fmt.Errorf("discord API呼び出しエラー: %w", err)
 	}
 	defer func() {
@@ -362,6 +460,7 @@ func (p *DiscordProvider) fetchMemberLive(ctx context.Context, subject string) (
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		p.tripFailCooldown()
 		return nil, false, fmt.Errorf("レスポンス読み取りエラー: %w", err)
 	}
 
@@ -370,25 +469,35 @@ func (p *DiscordProvider) fetchMemberLive(ctx context.Context, subject string) (
 		// この後でメンバー情報をパースする（下の共通処理へ抜ける）。
 	case http.StatusNotFound:
 		// ギルドに存在しない（退出済み等）。在籍なしとしてキャッシュする。
+		p.clearCooldown()
 		p.cacheMutex.Lock()
 		p.cache[subject] = &roleCacheEntry{expiresAt: time.Now().Add(p.ttlWithJitter()), isMember: false}
 		p.cacheMutex.Unlock()
 		return nil, false, nil
 	case http.StatusUnauthorized, http.StatusForbidden:
+		// トークンが無効。再試行しても直らないため長時間停止する。
+		// これを止めないと全リクエストがDiscordを叩き、濫用検知でトークンを失う。
+		p.tripCooldown(discordAuthCooldown)
+		slog.Error("Discord Botトークンが拒否されました。config.yaml の bot_token を確認してください。以後しばらくDiscordへの呼び出しを停止します",
+			"status", resp.StatusCode, "cooldown", discordAuthCooldown.String())
 		return nil, false, fmt.Errorf("discord Bot認証エラー (status: %d)", resp.StatusCode)
 	case http.StatusTooManyRequests:
-		var errResp discordErrorResponse
-		if err := json.Unmarshal(body, &errResp); err == nil {
-			return nil, false, fmt.Errorf("discord APIレート制限: %s", errResp.Message)
-		}
-		return nil, false, fmt.Errorf("discord APIレート制限 (status: 429)")
+		// Discordの指示（Retry-After）に従って待つ。従わないと429を誘発し続ける。
+		wait := retryAfter(resp, body)
+		p.tripCooldown(wait)
+		slog.Warn("Discord APIにレート制限されました。指定時間だけ呼び出しを停止します", "retry_after", wait.String())
+		return nil, false, fmt.Errorf("discord APIレート制限 (status: 429, retry_after: %s)", wait)
 	default:
+		p.tripFailCooldown()
 		var errResp discordErrorResponse
 		if err := json.Unmarshal(body, &errResp); err == nil {
 			return nil, false, fmt.Errorf("discord APIエラー (code: %d, message: %s)", errResp.Code, errResp.Message)
 		}
 		return nil, false, fmt.Errorf("discord APIエラー (status: %d)", resp.StatusCode)
 	}
+
+	// 成功したので抑止状態を解除する。
+	p.clearCooldown()
 
 	var member discordGuildMember
 	if err := json.Unmarshal(body, &member); err != nil {
@@ -410,6 +519,24 @@ func (p *DiscordProvider) fetchMemberLive(ctx context.Context, subject string) (
 	p.cacheMutex.Unlock()
 
 	return member.Roles, true, nil
+}
+
+// retryAfter は429レスポンスから待機時間を求めます。
+// ヘッダ `Retry-After`（秒）を優先し、無ければボディの `retry_after` を見ます。
+// どちらも読めない場合は既定値を返します（0秒待ちで即再試行しないため）。
+func retryAfter(resp *http.Response, body []byte) time.Duration {
+	if v := resp.Header.Get("Retry-After"); v != "" {
+		if sec, err := strconv.ParseFloat(v, 64); err == nil && sec > 0 {
+			return time.Duration(sec * float64(time.Second))
+		}
+	}
+	var payload struct {
+		RetryAfter float64 `json:"retry_after"`
+	}
+	if err := json.Unmarshal(body, &payload); err == nil && payload.RetryAfter > 0 {
+		return time.Duration(payload.RetryAfter * float64(time.Second))
+	}
+	return discordDefaultRetryAfter
 }
 
 // ClearCache はロールキャッシュをクリアします（テスト用）。
