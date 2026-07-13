@@ -53,6 +53,25 @@ type Provider interface {
 	PrecreateUserDirectory() bool
 }
 
+// hasRequiredRole はログイン要件のロールを満たすかを返します。
+// required が空なら要件なし（在籍のみでログイン可）。指定がある場合は
+// いずれか1つを保有していればよい（OR判定）。
+func hasRequiredRole(required, roles []string) bool {
+	if len(required) == 0 {
+		return true
+	}
+	held := make(map[string]struct{}, len(roles))
+	for _, r := range roles {
+		held[r] = struct{}{}
+	}
+	for _, r := range required {
+		if _, ok := held[r]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // MembershipSyncer は、ロールのリアルタイム同期（Discordゲートウェイ）を任意で
 // 提供するプロバイダーが実装します。対応しないプロバイダー（OIDC等）は実装しません。
 type MembershipSyncer interface {

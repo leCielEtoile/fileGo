@@ -64,6 +64,11 @@ type ProviderConfig struct {
 	RedirectURL  string   `yaml:"redirect_url"`
 	Scopes       []string `yaml:"scopes"`
 
+	// RequiredRoles はログインに必要なロールです（いずれか1つを保有していればよい）。
+	// 未設定なら在籍しているだけでログインできます（従来動作）。
+	// Discordはロール、OIDCは groups_claim の値と照合します。
+	RequiredRoles []string `yaml:"required_roles,omitempty"`
+
 	// Discord専用
 	GuildID  string `yaml:"guild_id,omitempty"`
 	BotToken string `yaml:"bot_token,omitempty"`

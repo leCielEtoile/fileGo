@@ -24,6 +24,10 @@ type OIDCConfig struct {
 	// 空の場合は "groups" が使われます。
 	GroupsClaim string
 
+	// RequiredRoles はログインに必要なロール（GroupsClaim の値と照合。いずれか1つ保有でよい）。
+	// 空なら認証できた全ユーザーを許可します（allowlistがあればそちらも適用）。
+	RequiredRoles []string
+
 	// AllowedEmailDomains / AllowedEmails は任意のアクセス許可リストです。
 	// いずれも空の場合は認証できた全ユーザーを許可します。
 	// いずれかが設定されている場合は、ユーザーのメールがドメイン一致または
@@ -62,6 +66,7 @@ type OIDCProvider struct {
 	// allowlist が空の場合は認証できた全ユーザーを許可します。
 	allowedEmailDomains []string
 	allowedEmails       []string
+	requiredRoles       []string
 
 	// roleCache はログイン時にID Tokenから取得したロール一覧を保持します。
 	// OIDCのロールはID Token発行時にしか得られずサーバー側で再取得できないため、
@@ -113,6 +118,7 @@ func NewOIDCProvider(ctx context.Context, cfg OIDCConfig, store RoleStore) (*OID
 		groupsClaim:         groupsClaim,
 		allowedEmailDomains: normalizeStrings(cfg.AllowedEmailDomains),
 		allowedEmails:       normalizeStrings(cfg.AllowedEmails),
+		requiredRoles:       cfg.RequiredRoles,
 		roleCache:           make(map[string]roleCacheRecord),
 	}, nil
 }
@@ -177,14 +183,30 @@ func (p *OIDCProvider) FetchUserInfo(ctx context.Context, token *oauth2.Token) (
 // IsMember は allowlist（許可メールドメイン/メール）でアクセス可否を判定します。
 // allowlistが未設定の場合は、認証できた全ユーザーを許可します
 // （Discordのギルドメンバーシップに相当する概念がないため）。
-func (p *OIDCProvider) IsMember(_ context.Context, _ *oauth2.Token, info *UserInfo) (bool, error) {
-	if len(p.allowedEmailDomains) == 0 && len(p.allowedEmails) == 0 {
-		return true, nil
+// allowlist（メール）と required_roles（groups_claim）はどちらも任意で、
+// 設定されているものは全て満たす必要があります（AND）。
+func (p *OIDCProvider) IsMember(ctx context.Context, _ *oauth2.Token, info *UserInfo) (bool, error) {
+	if len(p.allowedEmailDomains) > 0 || len(p.allowedEmails) > 0 {
+		if info == nil || !p.isEmailAllowed(info.Email) {
+			return false, nil
+		}
 	}
-	if info == nil {
-		return false, nil
+
+	if len(p.requiredRoles) > 0 {
+		if info == nil {
+			return false, nil
+		}
+		// FetchUserInfo がID Tokenから取得済みのロールを参照する（追加のI/Oは無い）。
+		roles, err := p.GetUserRoles(ctx, info.Subject)
+		if err != nil {
+			return false, err
+		}
+		if !hasRequiredRole(p.requiredRoles, roles) {
+			return false, nil
+		}
 	}
-	return p.isEmailAllowed(info.Email), nil
+
+	return true, nil
 }
 
 // isEmailAllowed はメールアドレスが allowlist に含まれるかを判定します。

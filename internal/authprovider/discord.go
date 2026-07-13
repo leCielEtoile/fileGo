@@ -94,6 +94,8 @@ type DiscordConfig struct {
 	BotToken     string
 	// GatewayEnabled はゲートウェイ常時接続によるロールのリアルタイム同期を試みるかどうか。
 	GatewayEnabled bool
+	// RequiredRoles はログインに必要なロール（いずれか1つ保有でよい）。空なら在籍のみで可。
+	RequiredRoles []string
 }
 
 // DiscordProvider はDiscordをこのアプリケーションで唯一のOAuth2実装として提供する
@@ -106,6 +108,8 @@ type DiscordProvider struct {
 	name        string
 	guildID     string
 	botToken    string
+	// requiredRoles はログインに必要なロール。空なら在籍のみでログインできる。
+	requiredRoles []string
 	// apiBase はDiscord REST APIのベースURL。テストでスタブへ差し替えるためにフィールド化する。
 	apiBase string
 
@@ -202,6 +206,7 @@ func NewDiscordProvider(cfg DiscordConfig) *DiscordProvider {
 		},
 		guildID:        cfg.GuildID,
 		botToken:       cfg.BotToken,
+		requiredRoles:  cfg.RequiredRoles,
 		apiBase:        discordAPIBase,
 		gatewayEnabled: cfg.GatewayEnabled,
 		httpClient:     &http.Client{Timeout: 10 * time.Second},
@@ -307,7 +312,7 @@ func (p *DiscordProvider) FetchUserInfo(ctx context.Context, token *oauth2.Token
 
 // IsMember は指定されたギルドのメンバーかどうかを確認します。
 func (p *DiscordProvider) IsMember(ctx context.Context, token *oauth2.Token, _ *UserInfo) (bool, error) {
-	url := fmt.Sprintf("https://discord.com/api/users/@me/guilds/%s/member", p.guildID)
+	url := fmt.Sprintf("%s/users/@me/guilds/%s/member", p.apiBase, p.guildID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return false, err
@@ -324,7 +329,21 @@ func (p *DiscordProvider) IsMember(ctx context.Context, token *oauth2.Token, _ *
 		}
 	}()
 
-	return resp.StatusCode == http.StatusOK, nil
+	if resp.StatusCode != http.StatusOK {
+		return false, nil // ギルド未在籍
+	}
+
+	// 在籍が必要ロールの条件を伴わないなら、ここで確定。
+	if len(p.requiredRoles) == 0 {
+		return true, nil
+	}
+
+	// このレスポンス自体がロールを含むため、追加のAPI呼び出しなしで判定できる。
+	var member discordGuildMember
+	if err := json.NewDecoder(resp.Body).Decode(&member); err != nil {
+		return false, fmt.Errorf("ギルドメンバー情報のパースに失敗しました: %w", err)
+	}
+	return hasRequiredRole(p.requiredRoles, member.Roles), nil
 }
 
 // PrecreateUserDirectory はDiscordではtrueを返します。
@@ -359,18 +378,21 @@ func (p *DiscordProvider) GetUserRoles(ctx context.Context, subject string) ([]s
 // VerifyMembership はギルド在籍を継続確認します。
 // ゲートウェイ同期が準備完了ならメモリから即時に、そうでなければBotトークンで
 // REST確認します(5分キャッシュ)。
+// 必要ロールが設定されている場合は在籍に加えてロール保有も要求します。これにより
+// ロールを剥奪されたユーザーは、既存セッションでも次のリクエストで弾かれます
+// （ログイン時だけ見ていると、剥奪後もセッションが生き続けてしまう）。
 func (p *DiscordProvider) VerifyMembership(ctx context.Context, subject string) (bool, error) {
 	if gs := p.gateway.Load(); gs != nil {
-		if _, present, ok := gs.lookup(subject); ok {
-			return present, nil
+		if roles, present, ok := gs.lookup(subject); ok {
+			return present && hasRequiredRole(p.requiredRoles, roles), nil
 		}
 	}
 
-	_, isMember, err := p.fetchMember(ctx, subject)
+	roles, isMember, err := p.fetchMember(ctx, subject)
 	if err != nil {
 		return false, err
 	}
-	return isMember, nil
+	return isMember && hasRequiredRole(p.requiredRoles, roles), nil
 }
 
 // fetchMember はギルドメンバー情報（ロールと在籍有無）を取得します(5分キャッシュ)。

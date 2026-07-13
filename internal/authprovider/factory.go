@@ -23,6 +23,7 @@ func New(ctx context.Context, c config.ProviderConfig, store RoleStore) (Provide
 			GuildID:        c.GuildID,
 			BotToken:       c.BotToken,
 			GatewayEnabled: c.GatewayOn(),
+			RequiredRoles:  c.RequiredRoles,
 		}), nil
 	case "oidc":
 		return NewOIDCProvider(ctx, OIDCConfig{
@@ -33,6 +34,7 @@ func New(ctx context.Context, c config.ProviderConfig, store RoleStore) (Provide
 			RedirectURL:         c.RedirectURL,
 			Scopes:              c.Scopes,
 			GroupsClaim:         c.GroupsClaim,
+			RequiredRoles:       c.RequiredRoles,
 			AllowedEmailDomains: c.AllowedEmailDomains,
 			AllowedEmails:       c.AllowedEmails,
 		}, store)
