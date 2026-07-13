@@ -80,11 +80,10 @@ auth:
 # データベース設定
 # ========================================
 database:
-  # SQLiteデータベースファイルのパス
-  # 既定値はDocker（コンテナ内）のパス。配布バイナリを直接実行する場合は
-  # 書き込み可能なローカルパスに変更する（例: "./data/fileserver.db"）。
-  # 環境変数 DATABASE_PATH でも上書きできる。
-  path: "/app/config/fileserver.db"
+  # SQLiteデータベースファイルのパス（相対パスはカレントディレクトリ基準）。
+  # Dockerでは、この設定は無効です。docker-compose.yml の
+  # environment で DATABASE_PATH を上書きしてください。
+  path: "./data/fileserver.db"
 
   # 最大接続数
   max_connections: 10
@@ -93,11 +92,10 @@ database:
 # ストレージ設定
 # ========================================
 storage:
-  # アップロードされたファイルの保存先ディレクトリ
-  # 既定値はDocker（コンテナ内）のパス。配布バイナリを直接実行する場合は
-  # 書き込み可能なローカルパスに変更する（例: "./data/uploads"）。
-  # 環境変数 STORAGE_UPLOAD_PATH でも上書きできる。
-  upload_path: "/app/data/uploads"
+  # アップロードされたファイルの保存先ディレクトリ（相対パスはカレントディレクトリ基準）。
+  # Dockerでは、この設定は無効です。docker-compose.yml の
+  # environment で STORAGE_UPLOAD_PATH を上書きしてください。
+  upload_path: "./data/uploads"
 
   # 通常アップロードの最大ファイルサイズ（バイト単位）
   max_file_size: 104857600  # 100MB

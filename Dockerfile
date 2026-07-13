@@ -66,8 +66,14 @@ COPY --from=builder --chown=65532:65532 /out/fileserver /app/fileserver
 WORKDIR /app
 USER 65532:65532
 
-# 設定ファイルの場所とタイムゾーン（tzdataはバイナリに埋め込み済み）
+# 設定ファイルの場所とタイムゾーン（tzdataはバイナリに埋め込み済み）。
+# DB/アップロード先はコンテナのボリューム構成に合わせて固定する。設定ひな型の
+# 既定値は「バイナリ直接実行でそのまま動く」相対パスにしてあるため、コンテナでは
+# ここで絶対パスを与えて上書きする（環境変数は config.yaml より優先される）。
+# 別の場所に置きたい場合は compose 等でこの環境変数を上書きする。
 ENV CONFIG_PATH=/app/config/config.yaml \
+    DATABASE_PATH=/app/config/fileserver.db \
+    STORAGE_UPLOAD_PATH=/app/data/uploads \
     TZ=Asia/Tokyo
 
 EXPOSE 8080

@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 
 	_ "modernc.org/sqlite"
 )
@@ -13,6 +15,15 @@ import (
 // Initialize はデータベース接続を初期化し、テーブルが存在しない場合は作成します。
 // maxConns は最大接続数（0以下の場合は既定値を使用）です。
 func Initialize(dbPath string, maxConns int) (*sql.DB, error) {
+	// SQLiteは親ディレクトリを作らないため、事前に用意する。
+	// これが無いと未作成のディレクトリを指した時点で
+	// "unable to open database file (14)" となる。
+	if dir := filepath.Dir(dbPath); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0750); err != nil {
+			return nil, fmt.Errorf("データベースディレクトリの作成に失敗しました: %w", err)
+		}
+	}
+
 	// WAL と busy_timeout を有効化し、同時アクセス時の "database is locked" を軽減する。
 	// DSN の pragma はコネクションごとに適用される。
 	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)",

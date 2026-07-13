@@ -5,11 +5,22 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-13
+
+配布バイナリが**設定を編集せずそのまま起動できる**ようになりました。Dockerでのファイル配置は従来と同一のため、**既存デプロイの移行作業は不要**です。
+
 ### Added（追加）
-- Dockerを使わない環境向けに、**配布バイナリからの起動手順**を [SETUP.md](docs/SETUP.md) へ追加（対応OS/アーキ一覧・初回起動時の設定生成・systemdユニット例）。
+- Dockerを使わない環境向けに、**配布バイナリからの起動手順**を [SETUP.md](docs/SETUP.md) へ追加（対応OS/アーキ一覧・初回起動時の設定生成・環境変数での上書き・systemdユニット例）。
 
 ### Changed（変更）
-- `config.yaml.example` の `database.path` / `storage.upload_path` に、既定値がDocker用の絶対パスであること、バイナリ直接実行時はローカルパスへ変更が必要であることを明記。この2つを変更しないと配布バイナリは `unable to open database file (14)` で起動できず、つまずきやすかった。
+- **設定ひな型の既定パスを相対パスに変更**（`database.path: ./data/fileserver.db` / `storage.upload_path: ./data/uploads`）。従来はDocker用の絶対パス（`/app/...`）が既定だったため、配布バイナリを実行すると `unable to open database file (14)` で起動できなかった。
+- Dockerイメージは環境変数（`DATABASE_PATH=/app/config/fileserver.db` / `STORAGE_UPLOAD_PATH=/app/data/uploads`）で絶対パスを与える。**コンテナ内のファイル配置は従来と同一**（DBは `./config/`、アップロードは `./data/`）。
+
+### Fixed（修正）
+- データベースの親ディレクトリが存在しない場合に `unable to open database file (14)` で起動できなかった問題を修正（SQLiteは親ディレクトリを作らないため、起動時に作成する）。
+
+### ⚠️ 破壊的変更（Docker利用者）
+- 環境変数は `config.yaml` より優先されるため、コンテナでは `config.yaml` の `database.path` / `storage.upload_path` を編集しても**反映されなくなりました**。保存先を変更したい場合は compose の `environment` で `DATABASE_PATH` / `STORAGE_UPLOAD_PATH` を上書きしてください。既定のまま使う場合は影響ありません。
 
 ## [0.1.2] - 2026-07-13
 
@@ -83,7 +94,8 @@ Discord Botトークンの濫用検知（強制リセット）を招く重大な
 
 ---
 
-[Unreleased]: https://github.com/leCielEtoile/fileGo/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/leCielEtoile/fileGo/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/leCielEtoile/fileGo/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/leCielEtoile/fileGo/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/leCielEtoile/fileGo/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/leCielEtoile/fileGo/releases/tag/v0.1.0

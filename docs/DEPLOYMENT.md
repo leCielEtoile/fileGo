@@ -150,7 +150,19 @@ auth:
 
 ## 環境変数設定
 
-環境変数で上書きできるのは `server` / `database` / `storage` の一部のみです（認証系は対象外）。
+環境変数で上書きできるのは `server` / `database` / `storage` の一部のみです（認証系は対象外）。**環境変数は `config.yaml` より優先されます。**
+
+### イメージが固定しているパス
+
+設定ひな型の既定値は「配布バイナリをそのまま実行できる」相対パス（`./data/...`）です。Dockerイメージはコンテナのボリューム構成に合わせ、次の環境変数で絶対パスを与えています。
+
+| 環境変数 | イメージでの既定値 | ホスト側（compose のマウント） |
+|---|---|---|
+| `CONFIG_PATH` | `/app/config/config.yaml` | `./config/config.yaml` |
+| `DATABASE_PATH` | `/app/config/fileserver.db` | `./config/fileserver.db` |
+| `STORAGE_UPLOAD_PATH` | `/app/data/uploads` | `./data/uploads` |
+
+そのため、コンテナでは `config.yaml` の `database.path` / `storage.upload_path` を編集しても**反映されません**（環境変数が優先されるため）。保存先を変えたい場合は compose の `environment` でこれらの環境変数を上書きしてください。
 
 ### 推奨環境変数
 
