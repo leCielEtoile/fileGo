@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+### Added（追加）
+- Dockerを使わない環境向けに、**配布バイナリからの起動手順**を [SETUP.md](docs/SETUP.md) へ追加（対応OS/アーキ一覧・初回起動時の設定生成・systemdユニット例）。
+
+### Changed（変更）
+- `config.yaml.example` の `database.path` / `storage.upload_path` に、既定値がDocker用の絶対パスであること、バイナリ直接実行時はローカルパスへ変更が必要であることを明記。この2つを変更しないと配布バイナリは `unable to open database file (14)` で起動できず、つまずきやすかった。
+
 ## [0.1.2] - 2026-07-13
 
 Discord Botトークンの濫用検知（強制リセット）を招く重大な不具合を修正。**Discord連携を使う場合は必ず更新してください。**

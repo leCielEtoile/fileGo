@@ -223,16 +223,118 @@ docker compose -f docker-compose.yml -f docker-compose.develop.yml up -d --build
 docker compose -f docker-compose.yml -f docker-compose.develop.yml logs -f
 ```
 
-### ローカルで直接ビルド・起動
+### 配布バイナリで起動（Dockerを使わない場合）
+
+Dockerが使えない環境向けに、[リリースページ](https://github.com/leCielEtoile/fileGo/releases) で各OS向けのバイナリを配布しています。**Webアセットと設定ひな型はバイナリに埋め込まれている**ため、実行に追加ファイルは不要です（Go処理系も不要）。
+
+| OS / アーキテクチャ | アセット |
+|---|---|
+| Linux (x86_64) | `fileserver-linux-amd64.tar.gz` |
+| Linux (ARM64) | `fileserver-linux-arm64.tar.gz` |
+| macOS (Intel) | `fileserver-darwin-amd64.tar.gz` |
+| macOS (Apple Silicon) | `fileserver-darwin-arm64.tar.gz` |
+| Windows (x86_64) | `fileserver-windows-amd64.zip` |
 
 ```bash
-# 依存関係のインストール
+# 1. ダウンロードして展開（例: Linux x86_64。VERSION は v0.1.2 など）
+curl -LO https://github.com/leCielEtoile/fileGo/releases/download/VERSION/fileserver-linux-amd64.tar.gz
+tar xzf fileserver-linux-amd64.tar.gz
+mv fileserver-linux-amd64 fileserver     # 扱いやすいようリネーム（任意）
+chmod +x fileserver
+
+# 2. 初回起動で config.yaml のひな型が実行ファイルと同じ場所に自動生成される
+#    （この時点ではまだ設定が未完成のため、DB初期化で終了する）
+./fileserver
+
+# 3. 生成された config.yaml を編集する
+vi config.yaml
+```
+
+> ⚠️ **必ず変更が必要な項目**：ひな型の `database.path` と `storage.upload_path` は **Docker（コンテナ内）の絶対パス** (`/app/...`) が既定です。バイナリを直接実行する場合はそのままだと
+> `データベース接続エラー: unable to open database file (14)` で起動できません。書き込み可能なローカルパスへ変更してください。
+
+```yaml
+database:
+  path: "./data/fileserver.db"      # /app/config/... から変更
+
+storage:
+  upload_path: "./data/uploads"     # /app/data/uploads から変更
+
+server:
+  secure_cookie: false              # HTTPで動かす場合（HTTPS配信なら true のまま）
+
+auth:
+  provider:
+    bot_token: "..."                # Discordの認証情報を設定
+    client_id: "..."
+    client_secret: "..."
+    guild_id: "..."
+    redirect_url: "http://localhost:8080/auth/callback"
+```
+
+```bash
+# 4. 起動
+./fileserver
+```
+
+> 相対パス（`./data/...`）は**カレントディレクトリ基準**で解決されます。常駐させる場合は下記 systemd の `WorkingDirectory` を設定するか、絶対パスを指定してください。
+
+設定ファイルを編集せず、環境変数で上書きすることもできます。
+
+```bash
+DATABASE_PATH=./data/fileserver.db \
+STORAGE_UPLOAD_PATH=./data/uploads \
+SERVER_PORT=8080 \
+  ./fileserver
+```
+
+別の場所の設定ファイルを使う場合は `CONFIG_PATH` を指定します（未指定時は実行ファイルと同じディレクトリの `config.yaml`）。
+
+```bash
+CONFIG_PATH=/etc/filego/config.yaml ./fileserver
+```
+
+#### systemd サービスとして常駐させる（Linux）
+
+```ini
+# /etc/systemd/system/filego.service
+[Unit]
+Description=fileGo file server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=filego
+WorkingDirectory=/opt/filego
+ExecStart=/opt/filego/fileserver
+Environment=CONFIG_PATH=/opt/filego/config.yaml
+Environment=LOG_LEVEL=info
+Restart=on-failure
+RestartSec=5s
+# 書き込みは data ディレクトリのみに限定する
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/filego/data /opt/filego/config.yaml
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now filego
+sudo systemctl status filego
+journalctl -u filego -f     # ログ（JSON構造化ログが出力される）
+```
+
+### ソースからビルドする場合
+
+```bash
 go mod download
-
-# ビルド
 go build -o fileserver .
-
-# 実行
 ./fileserver
 ```
 

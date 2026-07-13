@@ -72,6 +72,8 @@ curl http://localhost:8080/health   # => OK
 
 `.env` はポート・タイムゾーン・プロキシ等の運用設定に用います。**認証情報（bot_token / client_secret 等）は `config.yaml` に記述**してください（`config.yaml` は `.gitignore` 済み）。
 
+> 💡 **Dockerを使わない場合**: [リリースページ](https://github.com/leCielEtoile/fileGo/releases) の各OS向けバイナリで起動できます（Webアセットは埋め込み済みで追加ファイル不要）。手順は [セットアップガイド](docs/SETUP.md#配布バイナリで起動dockerを使わない場合) を参照。
+>
 > 💡 **開発者向け**: ソースからの開発は [開発ガイド](docs/DEVELOPMENT.md) を参照。
 
 ## 技術スタック
