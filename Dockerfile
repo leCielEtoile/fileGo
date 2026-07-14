@@ -11,7 +11,7 @@
 # ---- CSSビルドステージ ----
 # Tailwind をランタイムのCDNで実行せず、ビルド時に静的CSSへコンパイルする。
 # テンプレートとJSを走査し、実際に使用されているクラスのみを含む最小CSSを生成する。
-FROM node:22-alpine AS webbuilder
+FROM node:26-alpine AS webbuilder
 WORKDIR /web
 COPY package.json tailwind.config.js ./
 COPY web ./web
