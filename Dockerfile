@@ -57,7 +57,7 @@ RUN mkdir -p /out/rootfs/config /out/rootfs/data
 # 非root(UID 65532)・シェル無しの最小イメージ。CA証明書を同梱する。
 # :nonroot はバージョンを持たないローリングタグのため、再現性と
 # Dependabot による digest 更新の両立のためダイジェストで固定する。
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:b7bb25d9f7c31d2bdd1982feb4dafcaf137703c7075dbe2febb41c24212b946f AS runtime
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:f5b485ea962d9bd1186b2f6b3a061191539b905b82ec395de78cbfae51f20e35 AS runtime
 
 # 空のデータディレクトリとバイナリを非rootユーザー(65532)所有で配置
 COPY --from=builder --chown=65532:65532 /out/rootfs /app
