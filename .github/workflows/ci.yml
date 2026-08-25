@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -51,7 +51,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -81,7 +81,7 @@ jobs:
             goarch: arm64
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -115,20 +115,20 @@ jobs:
       security-events: write
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       # 検出結果はGitHub Securityタブへ集約する。ビルド自体は停止させず、
       # 継続的にアラートとして可視化する運用とする。
       - name: 🔒 Gosecセキュリティスキャナーを実行
-        uses: securego/gosec@v2.27.1
+        uses: securego/gosec@v2.28.0
         with:
           args: '-no-fail -fmt sarif -out gosec-results.sarif ./...'
 
       - name: 📤 Gosec結果をGitHub Securityにアップロード
         if: always()
-        uses: github/codeql-action/upload-sarif@v4.37.0
+        uses: github/codeql-action/upload-sarif@v4.37.8
         with:
           sarif_file: gosec-results.sarif
           category: gosec
@@ -153,7 +153,7 @@ jobs:
 
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -162,11 +162,11 @@ jobs:
         uses: docker/setup-qemu-action@v4.2.0
 
       - name: 🔧 Docker Buildxをセットアップ
-        uses: docker/setup-buildx-action@v4.2.0
+        uses: docker/setup-buildx-action@v4.3.0
 
       - name: 🔐 GitHub Container Registryにログイン
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4.4.0
+        uses: docker/login-action@v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -234,7 +234,7 @@ jobs:
 
       - name: 📤 Trivy結果をGitHub Securityにアップロード
         if: always() && matrix.platform == 'linux/amd64'
-        uses: github/codeql-action/upload-sarif@v4.37.0
+        uses: github/codeql-action/upload-sarif@v4.37.8
         with:
           sarif_file: 'trivy-results.sarif'
           category: trivy
@@ -264,7 +264,7 @@ jobs:
       packages: write
     steps:
       - name: 🔐 GitHub Container Registryにログイン
-        uses: docker/login-action@v4.4.0
+        uses: docker/login-action@v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -318,12 +318,12 @@ jobs:
     needs: [docker]
     steps:
       - name: 📥 コードをチェックアウト
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: 🔧 Docker Buildxをセットアップ
-        uses: docker/setup-buildx-action@v4.2.0
+        uses: docker/setup-buildx-action@v4.3.0
 
       # 既定の docker-compose.yml は公開イメージを使うため、ここでは develop
       # オーバーレイを重ねて「そのコミットのソース」からビルドする。これにより
