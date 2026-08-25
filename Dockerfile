@@ -19,7 +19,7 @@ RUN npm install --no-audit --no-fund \
     && npx tailwindcss -c ./tailwind.config.js -i ./web/tailwind/input.css -o ./web/static/css/tailwind.css --minify
 
 # ---- ビルドステージ ----
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 # CIから渡されるビルド情報。バイナリへ -ldflags -X で埋め込む。
 ARG VERSION=dev
